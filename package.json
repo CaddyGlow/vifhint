@@ -1,0 +1,13 @@
+{
+  "name": "link-hints-extension",
+  "version": "1.0.0",
+  "description": "Minimal link hints Chrome extension",
+  "scripts": {
+    "build": "tsc && cp ./manifest.json ./hints.css ./dist/",
+    "watch": "tsc --watch"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "typescript": "^5.3.3"
+  }
+}

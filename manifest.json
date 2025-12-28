@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Link Hints",
+  "version": "1.0.0",
+  "description": "Keyboard-driven link navigation with hint labels",
+  "permissions": [
+    "activeTab"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["hints.css"],
+      "run_at": "document_end"
+    }
+  ],
+  "commands": {
+    "activate-hints": {
+      "suggested_key": {
+        "default": "Alt+F"
+      },
+      "description": "Activate link hints"
+    }
+  }
+}
