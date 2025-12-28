@@ -1,14 +1,19 @@
 {
-  "name": "link-hints-extension",
-  "version": "1.0.0",
-  "description": "Minimal link hints Chrome extension",
-  "scripts": {
-    "build": "bun build src/content.ts --outfile=dist/content.js && bun build src/background.ts --outfile=dist/background.js && cp ./manifest.json ./hints.css ./dist/ && cp -r ./icons ./dist/",
-    "watch": "tsc --watch",
-    "typecheck": "tsc --noEmit"
-  },
-  "devDependencies": {
-    "@types/chrome": "^0.0.268",
-    "typescript": "^5.3.3"
-  }
+	"name": "link-hints-extension",
+	"version": "1.0.0",
+	"description": "Minimal link hints Chrome extension",
+	"scripts": {
+		"build": "bun build src/content.ts --outfile=dist/content.js && bun build src/background.ts --outfile=dist/background.js && cp ./manifest.json ./hints.css ./dist/ && cp -r ./icons ./dist/",
+		"icons:generate": "bash scripts/generate-icons.sh",
+		"format": "biome format --write .",
+		"format:check": "biome format --check .",
+		"lint": "biome lint .",
+		"watch": "tsc --watch",
+		"typecheck": "tsc --noEmit"
+	},
+	"devDependencies": {
+		"@types/chrome": "^0.0.268",
+		"@biomejs/biome": "^1.8.3",
+		"typescript": "^5.3.3"
+	}
 }

@@ -1,50 +1,48 @@
 .link-hint-label {
-  position: absolute;
-  z-index: 2147483647;
-  padding: 1px 3px;
-  background: #ffdd00;
-  color: #000;
-  font-family: monospace;
-  font-size: 11px;
-  font-weight: bold;
-  border: 1px solid #000;
-  border-radius: 2px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-  pointer-events: none;
-  line-height: 1;
+	position: absolute;
+	z-index: 2147483647;
+	padding: 1px 3px;
+	background: #ffdd00;
+	color: #000;
+	font-family: monospace;
+	font-size: 11px;
+	font-weight: bold;
+	border: 1px solid #000;
+	border-radius: 2px;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+	pointer-events: none;
+	line-height: 1;
 }
 
 .link-hint-label .matched {
-  color: #c00;
+	color: #c00;
 }
 
 .link-hint-input {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 2147483647;
-  padding: 8px 16px;
-  background: rgba(0, 0, 0, 0.8);
-  color: #ffdd00;
-  font-family: monospace;
-  font-size: 24px;
-  font-weight: bold;
-  border-radius: 6px;
-  pointer-events: none;
-  display: none;
+	position: fixed;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	z-index: 2147483647;
+	padding: 8px 16px;
+	background: rgba(0, 0, 0, 0.8);
+	color: #ffdd00;
+	font-family: monospace;
+	font-size: 24px;
+	font-weight: bold;
+	border-radius: 6px;
+	pointer-events: none;
+	display: none;
 }
 
 .link-hint-target {
-  outline: 2px dashed #ffa500 !important;
-  outline-offset: -2px !important;
-  box-shadow: inset 0 0 0 2px rgba(255, 165, 0, 0.3) !important;
+	outline: 2px dashed #ffa500 !important;
+	outline-offset: -2px !important;
+	box-shadow: inset 0 0 0 2px rgba(255, 165, 0, 0.3) !important;
 }
 
 .link-hint-target-input {
-  outline: 2px solid #00d4ff !important;
-  outline-offset: -2px !important;
-  box-shadow:
-    inset 0 0 0 2px rgba(0, 212, 255, 0.35),
-    0 0 8px rgba(0, 212, 255, 0.6) !important;
+	outline: 2px solid #00d4ff !important;
+	outline-offset: -2px !important;
+	box-shadow: inset 0 0 0 2px rgba(0, 212, 255, 0.35), 0 0 8px rgba(0, 212, 255, 0.6) !important;
 }

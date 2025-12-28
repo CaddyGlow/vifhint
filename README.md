@@ -13,12 +13,12 @@ A minimal keyboard-driven link navigation extension for Chrome, inspired by Surf
 
 1. Install dependencies:
 ```bash
-npm install
+bun install
 ```
 
 2. Build the extension:
 ```bash
-npm run build
+bun run build
 ```
 
 3. Load in Chrome:
@@ -66,7 +66,14 @@ Edit `hints.css` to customize the appearance of hint labels.
 
 Watch mode for development:
 ```bash
-npm run watch
+bun run watch
+```
+
+Formatting, linting, and type checking:
+```bash
+bun run format
+bun run lint
+bun run typecheck
 ```
 
 After making changes, rebuild and reload the extension in Chrome.
