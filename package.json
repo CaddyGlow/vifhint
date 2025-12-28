@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "description": "Minimal link hints Chrome extension",
   "scripts": {
-    "build": "tsc && cp ./manifest.json ./hints.css ./dist/",
-    "watch": "tsc --watch"
+    "build": "bun build src/content.ts --outfile=dist/content.js && bun build src/background.ts --outfile=dist/background.js && cp ./manifest.json ./hints.css ./dist/",
+    "watch": "tsc --watch",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.268",

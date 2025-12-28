@@ -1,5 +1,7 @@
 // Optimized link hints implementation
 
+import { KeyBindings } from './keybindings';
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -18,11 +20,15 @@ interface HintElement {
 
 type HintAlign = 'left' | 'center' | 'right';
 
+type HintMode = 'normal' | 'newTab' | 'backgroundTab';
+
 interface HintConfig {
   readonly hintChars: string;
   readonly hintAlign: HintAlign;
   readonly hintOffset: { readonly x: number; readonly y: number };
   readonly clickableSelector: string;
+  readonly showElementBorder: boolean;
+  readonly debugTimings: boolean;
 }
 
 // ============================================================================
@@ -34,31 +40,22 @@ const config: HintConfig = {
   hintAlign: 'left',
   hintOffset: { x: -8, y: -10 },
   clickableSelector: '',
+  showElementBorder: true,
+  debugTimings: true,
 };
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-// Use querySelectorAll directly - browser's native selector engine is faster
-const BASE_CLICKABLE_SELECTOR = [
-  'a[href]', 'a[onclick]', 'button', 'select', 'input', 'textarea', 'summary',
-  '[onclick]', '[contenteditable="true"]',
-  '[role="button"]', '[role="link"]', '[role="menuitem"]',
-  '[role="option"]', '[role="switch"]', '[role="tab"]',
-  '[role="checkbox"]', '[role="combobox"]',
-  '[role="menuitemcheckbox"]', '[role="menuitemradio"]'
-].join(',');
+// Clickable tag names
+const CLICKABLE_TAGS = new Set(['A', 'BUTTON', 'SELECT', 'INPUT', 'TEXTAREA', 'SUMMARY']);
 
-function getClickableSelector(): string {
-  if (config.clickableSelector) {
-    return `${BASE_CLICKABLE_SELECTOR},${config.clickableSelector}`;
-  }
-  return BASE_CLICKABLE_SELECTOR;
-}
-
-// Elements that don't need overlap detection (they're always on top or interactive)
-const SAFE_ELEMENTS = /^(INPUT|TEXTAREA|SELECT|BUTTON)$/;
+// Clickable roles
+const CLICKABLE_ROLES = new Set([
+  'button', 'link', 'menuitem', 'option', 'switch', 'tab',
+  'checkbox', 'combobox', 'menuitemcheckbox', 'menuitemradio'
+]);
 
 // ============================================================================
 // Helper Functions
@@ -75,32 +72,84 @@ function isEditable(el: HTMLElement): boolean {
   return false;
 }
 
-function getElementDataIfVisible(
+function findHoverElements(): Set<Element> {
+  const selectors = new Set<string>();
+
+  for (const sheet of document.styleSheets) {
+    try {
+      for (const rule of sheet.cssRules) {
+        if (rule instanceof CSSStyleRule &&
+            rule.style.cursor === 'pointer' &&
+            rule.selectorText?.includes(':hover')) {
+          const baseSelector = rule.selectorText.replace(/:hover/g, '').trim();
+          if (baseSelector) selectors.add(baseSelector);
+        }
+      }
+    } catch {
+      // Cross-origin stylesheets throw SecurityError
+    }
+  }
+
+  if (selectors.size === 0) return new Set();
+
+  try {
+    return new Set(document.querySelectorAll(Array.from(selectors).join(',')));
+  } catch {
+    return new Set();
+  }
+}
+
+// Check if element is clickable (like BrowseCut's isClickable)
+function isClickable(el: HTMLElement, hoverElements: Set<Element>): 'tag' | 'handler' | 'cursor' | 'hover' | null {
+  // Check tag
+  if (CLICKABLE_TAGS.has(el.tagName)) {
+    if (el.tagName === 'A' && !(el as HTMLAnchorElement).href && !el.onclick) return null;
+    return 'tag';
+  }
+
+  // Check role
+  const role = el.getAttribute('role');
+  if (role && CLICKABLE_ROLES.has(role)) return 'tag';
+
+  // Check onclick
+  if (el.onclick || el.getAttribute('onclick')) return 'handler';
+
+  // Check contenteditable
+  if (el.contentEditable === 'true') return 'tag';
+
+  // Check hover elements (from CSS :hover rules)
+  if (hoverElements.has(el)) return 'hover';
+
+  // Check cursor style
+  const cursor = getComputedStyle(el).cursor;
+  if (cursor === 'pointer' || cursor.startsWith('url(')) return 'cursor';
+
+  return null;
+}
+
+// Check visibility and get element data
+function getElementData(
   el: HTMLElement,
   viewportWidth: number,
   viewportHeight: number
 ): ElementData | null {
-  // Check 1: offsetWidth/Height (very cheap, no reflow)
   if (!el.offsetWidth || !el.offsetHeight) return null;
 
-  // Check 2: Get rect once, cache it
   const rect = el.getBoundingClientRect();
 
-  // Check 3: In viewport? (cheap comparison)
+  // In viewport?
   if (rect.bottom <= 0 || rect.top >= viewportHeight ||
       rect.right <= 0 || rect.left >= viewportWidth) return null;
 
-  // Check 4: Min size (4px, or 1px for editables)
+  // Min size
   const minSize = isEditable(el) ? 1 : 4;
   if (rect.width <= minSize || rect.height <= minSize) return null;
 
-  // Check 5: Get style once, cache it (expensive)
   const style = getComputedStyle(el);
 
-  // Check 6: Visibility
+  // Visibility checks
   if (style.visibility === 'hidden' || style.display === 'none') return null;
 
-  // Check 7: Opacity (skip for non-text inputs)
   const opacity = parseFloat(style.opacity);
   if (opacity <= 0.1 && !(el.tagName === 'INPUT' && (el as HTMLInputElement).type !== 'text')) {
     return null;
@@ -109,21 +158,71 @@ function getElementDataIfVisible(
   return { element: el, rect, style };
 }
 
-function addCursorPointerElements(
-  results: ElementData[],
-  viewportWidth: number,
-  viewportHeight: number
-): void {
-  const found = new Set(results.map(r => r.element));
+function hasSimilarBounds(a: DOMRect, b: DOMRect, threshold = 30): boolean {
+  return Math.abs(a.left - b.left) < threshold &&
+         Math.abs(a.top - b.top) < threshold &&
+         Math.abs(a.right - b.right) < threshold &&
+         Math.abs(a.bottom - b.bottom) < threshold;
+}
 
-  // Use TreeWalker for efficient traversal
+function getElementHref(el: HTMLElement): string | null {
+  if (el.tagName === 'A') return (el as HTMLAnchorElement).href || null;
+  return el.closest('a')?.href || null;
+}
+
+// BrowseCut-style: check if we should dedupe (replace parent with child)
+function shouldDedupeInline(lastData: ElementData, newData: ElementData): boolean {
+  // Similar bounds = dedupe
+  if (hasSimilarBounds(lastData.rect, newData.rect)) return true;
+
+  // Same URL = dedupe
+  const lastHref = getElementHref(lastData.element);
+  const newHref = getElementHref(newData.element);
+  if (!lastHref || !newHref || lastHref === newHref) return true;
+
+  return false;
+}
+
+// BrowseCut-style: check if element is accessible at multiple points
+function isAccessible(element: HTMLElement, rect: DOMRect): boolean {
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+
+  // Test 4 points like BrowseCut: top-right, top-left, center, bottom-center
+  const testPoints = [
+    { x: rect.right - 8, y: rect.top + 8 },
+    { x: rect.left + 8, y: rect.top + 8 },
+    { x: centerX, y: centerY },
+    { x: centerX, y: rect.bottom - 8 }
+  ];
+
+  return testPoints.some(({ x, y }) => {
+    const topEl = document.elementFromPoint(x, y);
+    if (!topEl) return false;
+    return topEl === element || element.contains(topEl);
+  });
+}
+
+function filterOverlaps(elements: ElementData[]): ElementData[] {
+  return elements.filter(({ element, rect }) => {
+    return isAccessible(element, rect);
+  });
+}
+
+function collectClickableElements(): ElementData[] {
+  const results: ElementData[] = [];
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const hoverElements = findHoverElements();
+  const shadowRoots: ShadowRoot[] = [];
+
+  // TreeWalker traversal with inline deduplication (like BrowseCut)
   const walker = document.createTreeWalker(
     document.body,
     NodeFilter.SHOW_ELEMENT,
     {
       acceptNode(node) {
         const el = node as HTMLElement;
-        if (found.has(el)) return NodeFilter.FILTER_SKIP;
         if (!el.offsetWidth || !el.offsetHeight) return NodeFilter.FILTER_SKIP;
         return NodeFilter.FILTER_ACCEPT;
       }
@@ -133,125 +232,69 @@ function addCursorPointerElements(
   let node: Node | null;
   while (node = walker.nextNode()) {
     const el = node as HTMLElement;
-    const style = getComputedStyle(el);
-    const cursor = style.cursor;
 
-    if (cursor === 'pointer' || cursor.startsWith('url(')) {
-      const data = getElementDataIfVisible(el, viewportWidth, viewportHeight);
-      if (data) {
-        results.push(data);
-        found.add(el);
+    // Collect shadow roots for later
+    if (el.shadowRoot) shadowRoots.push(el.shadowRoot);
+
+    // Check if clickable
+    const clickType = isClickable(el, hoverElements);
+    if (!clickType) continue;
+
+    // Get visibility data
+    const data = getElementData(el, viewportWidth, viewportHeight);
+    if (!data) continue;
+
+    // BrowseCut-style inline deduplication:
+    // If last element contains this one and should dedupe, replace it
+    const last = results.at(-1);
+    if (last && last.element.contains(el) && shouldDedupeInline(last, data)) {
+      // Keep <a> with href, otherwise replace with inner element
+      if (last.element.tagName !== 'A' || !(last.element as HTMLAnchorElement).href) {
+        results[results.length - 1] = data;
       }
+      // Either way, don't add the new element separately
+      continue;
     }
+
+    results.push(data);
   }
-}
 
-function addShadowDOMElements(
-  results: ElementData[],
-  viewportWidth: number,
-  viewportHeight: number
-): void {
-  const found = new Set(results.map(r => r.element));
-
-  // Find all elements with shadow roots
-  const allElements = document.querySelectorAll('*');
-  for (let i = 0; i < allElements.length; i++) {
-    const host = allElements[i];
-    if (host.shadowRoot) {
-      const shadowElements = host.shadowRoot.querySelectorAll(getClickableSelector());
-      for (let j = 0; j < shadowElements.length; j++) {
-        const el = shadowElements[j] as HTMLElement;
-        if (!found.has(el)) {
-          const data = getElementDataIfVisible(el, viewportWidth, viewportHeight);
-          if (data) {
-            results.push(data);
-            found.add(el);
-          }
+  // Handle shadow DOM elements
+  for (const shadowRoot of shadowRoots) {
+    const shadowWalker = document.createTreeWalker(
+      shadowRoot,
+      NodeFilter.SHOW_ELEMENT,
+      {
+        acceptNode(node) {
+          const el = node as HTMLElement;
+          if (!el.offsetWidth || !el.offsetHeight) return NodeFilter.FILTER_SKIP;
+          return NodeFilter.FILTER_ACCEPT;
         }
       }
-    }
-  }
-}
+    );
 
-function filterOverlaps(elements: ElementData[]): ElementData[] {
-  return elements.filter(({ element, rect }) => {
-    // Skip check for safe elements (inputs, buttons, etc.)
-    if (SAFE_ELEMENTS.test(element.tagName)) return true;
-    if (element.contentEditable === 'true') return true;
+    while (node = shadowWalker.nextNode()) {
+      const el = node as HTMLElement;
+      const clickType = isClickable(el, hoverElements);
+      if (!clickType) continue;
 
-    // Check if element is actually clickable at its center
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-    const topEl = document.elementFromPoint(centerX, centerY);
+      const data = getElementData(el, viewportWidth, viewportHeight);
+      if (!data) continue;
 
-    if (!topEl) return true;
-
-    // Element is visible if:
-    // - topEl is the element itself
-    // - topEl is inside the element
-    // - element is inside topEl
-    // - topEl is in element's shadow root
-    return topEl === element ||
-           element.contains(topEl) ||
-           topEl.contains(element) ||
-           (element.shadowRoot?.contains(topEl) ?? false);
-  });
-}
-
-function filterAncestors(elements: ElementData[]): ElementData[] {
-  const result: ElementData[] = [];
-
-  for (const data of elements) {
-    let dominated = false;
-
-    for (let i = 0; i < result.length; i++) {
-      const existing = result[i];
-
-      if (existing.element.contains(data.element)) {
-        // Existing contains new - replace unless existing is <a> with href
-        if (existing.element.tagName !== 'A' || !(existing.element as HTMLAnchorElement).href) {
-          result[i] = data;
+      const last = results.at(-1);
+      if (last && last.element.contains(el) && shouldDedupeInline(last, data)) {
+        if (last.element.tagName !== 'A' || !(last.element as HTMLAnchorElement).href) {
+          results[results.length - 1] = data;
         }
-        dominated = true;
-        break;
-      } else if (data.element.contains(existing.element)) {
-        // New contains existing - skip new
-        dominated = true;
-        break;
+        continue;
       }
+
+      results.push(data);
     }
-
-    if (!dominated) result.push(data);
   }
 
-  return result;
-}
-
-function collectClickableElements(): ElementData[] {
-  const results: ElementData[] = [];
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-
-  // Phase 1: Query selector elements (fast, native)
-  const selectorElements = document.querySelectorAll(getClickableSelector());
-
-  // Phase 2: Single pass filter with cached data
-  for (let i = 0; i < selectorElements.length; i++) {
-    const data = getElementDataIfVisible(selectorElements[i] as HTMLElement, viewportWidth, viewportHeight);
-    if (data) results.push(data);
-  }
-
-  // Phase 3: Find cursor:pointer elements not in selector
-  addCursorPointerElements(results, viewportWidth, viewportHeight);
-
-  // Phase 4: Shadow DOM traversal (lazy, only if needed)
-  addShadowDOMElements(results, viewportWidth, viewportHeight);
-
-  // Phase 5: Filter overlaps (expensive, do last, skip safe elements)
-  const filtered = filterOverlaps(results);
-
-  // Phase 6: Dedupe ancestors
-  return filterAncestors(filtered);
+  // Filter overlaps (elements hidden behind others)
+  return filterOverlaps(results);
 }
 
 // ============================================================================
@@ -263,10 +306,23 @@ class LinkHints {
   #active = false;
   #currentInput = '';
   #inputDisplay: HTMLElement | null = null;
+  #mode: HintMode = 'normal';
 
   constructor() {
     this.#setupKeyListener();
     this.#setupCommandListener();
+  }
+
+  // Public API for KeyBindings integration
+  isActive(): boolean {
+    return this.#active;
+  }
+
+  activate(mode: HintMode = 'normal'): void {
+    if (!this.#active) {
+      this.#mode = mode;
+      this.#activate();
+    }
   }
 
   #setupCommandListener(): void {
@@ -339,11 +395,21 @@ class LinkHints {
     // Create input display
     this.#createInputDisplay();
 
+    const timings: Record<string, number> = {};
+    const mark = (label: string): void => {
+      if (config.debugTimings) timings[label] = performance.now();
+    };
+    const fmt = (value: number): string => value.toFixed(1);
+
+    mark('start');
+
     // Collect elements using optimized pipeline
     const elements = collectClickableElements();
+    mark('collected');
 
     // Generate hint strings
     const hintStrings = this.#generateHints(elements.length);
+    mark('generated');
 
     // Create hints
     this.#hints = elements.map((data, i) => ({
@@ -351,9 +417,34 @@ class LinkHints {
       hint: hintStrings[i],
       label: this.#createLabel(hintStrings[i])
     }));
+    mark('created');
+
+    // Add border to hinted elements
+    if (config.showElementBorder) {
+      this.#hints.forEach(h => h.element.classList.add('link-hint-target'));
+    }
+    mark('bordered');
 
     // Show hints using cached rects
     this.#showHints(elements);
+    mark('shown');
+
+    if (config.debugTimings) {
+      const collectMs = timings.collected - timings.start;
+      const generateMs = timings.generated - timings.collected;
+      const createMs = timings.created - timings.generated;
+      const borderMs = timings.bordered - timings.created;
+      const showMs = timings.shown - timings.bordered;
+      const totalMs = timings.shown - timings.start;
+
+      // eslint-disable-next-line no-console
+      console.debug(
+        `[link-hints] elements=${elements.length} ` +
+        `collect=${fmt(collectMs)}ms generate=${fmt(generateMs)}ms ` +
+        `create=${fmt(createMs)}ms border=${fmt(borderMs)}ms ` +
+        `show=${fmt(showMs)}ms total=${fmt(totalMs)}ms`
+      );
+    }
   }
 
   #createInputDisplay(): void {
@@ -372,7 +463,10 @@ class LinkHints {
   #deactivate(): void {
     this.#active = false;
     this.#currentInput = '';
-    this.#hints.forEach(h => h.label.remove());
+    this.#hints.forEach(h => {
+      h.label.remove();
+      h.element.classList.remove('link-hint-target');
+    });
     this.#hints = [];
     if (this.#inputDisplay) {
       this.#inputDisplay.remove();
@@ -472,19 +566,61 @@ class LinkHints {
   }
 
   #dispatchMouseEvents(element: HTMLElement): void {
-    const events = ['mouseover', 'pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'] as const;
-    for (const eventName of events) {
-      element.dispatchEvent(new MouseEvent(eventName, {
-        bubbles: true,
-        cancelable: true,
-        composed: true,
-        view: window
-      }));
-    }
+    // Get element center for realistic mouse coordinates
+    const rect = element.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+
+    const eventOptions = {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      view: window,
+      clientX: x,
+      clientY: y,
+      screenX: x + window.screenX,
+      screenY: y + window.screenY
+    };
+
+    // Dispatch full sequence of mouse events
+    element.dispatchEvent(new MouseEvent('mouseenter', { ...eventOptions, bubbles: false }));
+    element.dispatchEvent(new MouseEvent('mouseover', eventOptions));
+    element.dispatchEvent(new MouseEvent('mousemove', eventOptions));
+    element.dispatchEvent(new PointerEvent('pointerdown', { ...eventOptions, button: 0, buttons: 1 }));
+    element.dispatchEvent(new MouseEvent('mousedown', { ...eventOptions, button: 0, buttons: 1 }));
+    element.dispatchEvent(new PointerEvent('pointerup', { ...eventOptions, button: 0 }));
+    element.dispatchEvent(new MouseEvent('mouseup', { ...eventOptions, button: 0 }));
+    element.dispatchEvent(new MouseEvent('click', { ...eventOptions, button: 0 }));
+  }
+
+  #getAnchorHref(anchor: HTMLAnchorElement): string | null {
+    const rawHref = anchor.getAttribute('href');
+    return rawHref ? rawHref.trim() : null;
+  }
+
+  #isJavascriptLink(anchor: HTMLAnchorElement): boolean {
+    const rawHref = this.#getAnchorHref(anchor);
+    return !!rawHref && /^\s*javascript:/i.test(rawHref);
   }
 
   #clickElement(element: HTMLElement): void {
+    // Handle new tab modes
+    if (this.#mode !== 'normal') {
+      const url = this.#getElementUrl(element);
+      if (url) {
+        chrome.runtime.sendMessage({
+          type: 'open-url',
+          url,
+          background: this.#mode === 'backgroundTab'
+        });
+        return;
+      }
+      // Fall through to normal click if no URL
+    }
+
     if (this.#isEditableElement(element)) {
+      // Click to potentially close any overlays/modals blocking focus
+      element.click();
       element.focus();
       if (element.localName === 'input' || element.localName === 'textarea') {
         try {
@@ -495,10 +631,49 @@ class LinkHints {
         }
       }
     } else {
+      // Focus first for elements that need it
+      if (element.tabIndex >= 0) {
+        element.focus();
+      }
+      // Dispatch full mouse event sequence (BrowseCut/Surfingkeys-style)
+      const anchor = element.tagName === 'A' ? (element as HTMLAnchorElement) : null;
+      if (anchor && this.#isJavascriptLink(anchor)) {
+        // Prevent default javascript: navigation while still allowing handlers
+        element.addEventListener('click', (event) => event.preventDefault(), { capture: true, once: true });
+      }
       this.#dispatchMouseEvents(element);
     }
+  }
+
+  #getElementUrl(element: HTMLElement): string | null {
+    // Check if element is an anchor
+    if (element.tagName === 'A') {
+      const anchor = element as HTMLAnchorElement;
+      if (this.#isJavascriptLink(anchor)) return null;
+      const rawHref = this.#getAnchorHref(anchor);
+      if (!rawHref) return null;
+      try {
+        return new URL(rawHref, window.location.href).href;
+      } catch {
+        return null;
+      }
+    }
+    // Check for closest anchor parent
+    const anchor = element.closest('a');
+    if (anchor) {
+      if (this.#isJavascriptLink(anchor)) return null;
+      const rawHref = this.#getAnchorHref(anchor);
+      if (!rawHref) return null;
+      try {
+        return new URL(rawHref, window.location.href).href;
+      } catch {
+        return null;
+      }
+    }
+    return null;
   }
 }
 
 // Initialize
-new LinkHints();
+const linkHints = new LinkHints();
+new KeyBindings(linkHints);

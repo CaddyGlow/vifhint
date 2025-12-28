@@ -4,7 +4,9 @@
   "version": "1.0.0",
   "description": "Keyboard-driven link navigation with hint labels",
   "permissions": [
-    "activeTab"
+    "activeTab",
+    "tabs",
+    "sessions"
   ],
   "background": {
     "service_worker": "background.js"
