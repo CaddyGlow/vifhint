@@ -1,10 +1,10 @@
-# Link Hints Chrome Extension
+# VifHint Chrome Extension
 
 A minimal keyboard-driven link navigation extension for Chrome, inspired by SurfingKeys but focused solely on link hints.
 
 ## Features
 
-- **Link Hints**: Press `Alt+F` to show hint labels on all clickable elements
+- **VifHint**: Press `Alt+F` to show hint labels on all clickable elements
 - Type the hint characters to navigate
 - Press `Escape` to cancel
 - Press `Backspace` to undo characters
@@ -39,7 +39,7 @@ npm run build
 ### Change Keyboard Shortcut
 
 1. Go to `chrome://extensions/shortcuts`
-2. Find "Link Hints"
+2. Find "VifHint"
 3. Set your preferred shortcut
 
 ### Change Hint Characters
@@ -49,6 +49,14 @@ Edit `src/content.ts` and modify the `hintChars` property:
 ```typescript
 private hintChars = 'asdfghjkl'; // Change to your preferred characters
 ```
+
+### Settings
+
+Edit `src/settings.ts` to tweak defaults:
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `settings.stealFocusOnLoad` | `true` | Prevent focus on inputs when the page loads so you can use link hints without pressing `Esc`. |
 
 ### Change Hint Styling
 

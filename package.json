@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Minimal link hints Chrome extension",
   "scripts": {
-    "build": "bun build src/content.ts --outfile=dist/content.js && bun build src/background.ts --outfile=dist/background.js && cp ./manifest.json ./hints.css ./dist/",
+    "build": "bun build src/content.ts --outfile=dist/content.js && bun build src/background.ts --outfile=dist/background.js && cp ./manifest.json ./hints.css ./dist/ && cp -r ./icons ./dist/",
     "watch": "tsc --watch",
     "typecheck": "tsc --noEmit"
   },

@@ -1,6 +1,7 @@
 // Optimized link hints implementation
 
 import { KeyBindings } from './keybindings';
+import { appConfig } from './config';
 
 // ============================================================================
 // Types
@@ -72,6 +73,49 @@ function isEditable(el: HTMLElement): boolean {
   return false;
 }
 
+function shouldStealFocusFrom(el: HTMLElement): boolean {
+  if (el === document.body || el === document.documentElement) return false;
+  return isEditable(el);
+}
+
+function setupStealFocusOnLoad(): void {
+  if (!appConfig.settings.stealFocusOnLoad) return;
+
+  const blurActive = (): void => {
+    const active = document.activeElement as HTMLElement | null;
+    if (active && shouldStealFocusFrom(active)) {
+      try {
+        active.blur();
+      } catch {
+        // Ignore blur errors on protected inputs
+      }
+    }
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', blurActive, { once: true });
+  } else {
+    blurActive();
+  }
+
+  const focusHandler = (event: FocusEvent): void => {
+    if (event.isTrusted) return;
+    const target = event.target as HTMLElement | null;
+    if (target && shouldStealFocusFrom(target)) {
+      try {
+        target.blur();
+      } catch {
+        // Ignore blur errors on protected inputs
+      }
+    }
+  };
+
+  document.addEventListener('focusin', focusHandler, true);
+  window.setTimeout(() => {
+    document.removeEventListener('focusin', focusHandler, true);
+  }, 1000);
+}
+
 function findHoverElements(): Set<Element> {
   const selectors = new Set<string>();
 
@@ -125,6 +169,38 @@ function isClickable(el: HTMLElement, hoverElements: Set<Element>): 'tag' | 'han
   if (cursor === 'pointer' || cursor.startsWith('url(')) return 'cursor';
 
   return null;
+}
+
+function isHardClickable(el: HTMLElement): boolean {
+  if (CLICKABLE_TAGS.has(el.tagName)) {
+    if (el.tagName === 'A') {
+      const anchor = el as HTMLAnchorElement;
+      if (!anchor.href && !el.onclick && !el.getAttribute('onclick')) return false;
+    }
+    if (el.tagName === 'INPUT') {
+      const type = (el as HTMLInputElement).type;
+      if (/^(hidden)$/i.test(type)) return false;
+    }
+    return true;
+  }
+
+  const role = el.getAttribute('role');
+  if (role && CLICKABLE_ROLES.has(role)) return true;
+
+  if (el.onclick || el.getAttribute('onclick')) return true;
+
+  if (el.contentEditable === 'true') return true;
+
+  return false;
+}
+
+function hasHardClickableAncestor(el: HTMLElement): boolean {
+  let parent = el.parentElement;
+  while (parent && parent !== document.body && parent !== document.documentElement) {
+    if (isHardClickable(parent)) return true;
+    parent = parent.parentElement;
+  }
+  return false;
 }
 
 // Check visibility and get element data
@@ -239,6 +315,9 @@ function collectClickableElements(): ElementData[] {
     // Check if clickable
     const clickType = isClickable(el, hoverElements);
     if (!clickType) continue;
+    if ((clickType === 'cursor' || clickType === 'hover') && hasHardClickableAncestor(el)) {
+      continue;
+    }
 
     // Get visibility data
     const data = getElementData(el, viewportWidth, viewportHeight);
@@ -277,6 +356,9 @@ function collectClickableElements(): ElementData[] {
       const el = node as HTMLElement;
       const clickType = isClickable(el, hoverElements);
       if (!clickType) continue;
+      if ((clickType === 'cursor' || clickType === 'hover') && hasHardClickableAncestor(el)) {
+        continue;
+      }
 
       const data = getElementData(el, viewportWidth, viewportHeight);
       if (!data) continue;
@@ -295,6 +377,20 @@ function collectClickableElements(): ElementData[] {
 
   // Filter overlaps (elements hidden behind others)
   return filterOverlaps(results);
+}
+
+function sortElementsForHints(elements: ElementData[]): ElementData[] {
+  const rowTolerance = 8;
+  return elements
+    .map((data, index) => ({ data, index }))
+    .sort((a, b) => {
+      const topDiff = a.data.rect.top - b.data.rect.top;
+      if (Math.abs(topDiff) > rowTolerance) return topDiff;
+      const leftDiff = a.data.rect.left - b.data.rect.left;
+      if (Math.abs(leftDiff) > 1) return leftDiff;
+      return a.index - b.index;
+    })
+    .map(({ data }) => data);
 }
 
 // ============================================================================
@@ -404,7 +500,7 @@ class LinkHints {
     mark('start');
 
     // Collect elements using optimized pipeline
-    const elements = collectClickableElements();
+    const elements = sortElementsForHints(collectClickableElements());
     mark('collected');
 
     // Generate hint strings
@@ -421,7 +517,13 @@ class LinkHints {
 
     // Add border to hinted elements
     if (config.showElementBorder) {
-      this.#hints.forEach(h => h.element.classList.add('link-hint-target'));
+      this.#hints.forEach(h => {
+        if (isEditable(h.element)) {
+          h.element.classList.add('link-hint-target-input');
+        } else {
+          h.element.classList.add('link-hint-target');
+        }
+      });
     }
     mark('bordered');
 
@@ -466,6 +568,7 @@ class LinkHints {
     this.#hints.forEach(h => {
       h.label.remove();
       h.element.classList.remove('link-hint-target');
+      h.element.classList.remove('link-hint-target-input');
     });
     this.#hints = [];
     if (this.#inputDisplay) {
@@ -475,20 +578,29 @@ class LinkHints {
   }
 
   #generateHints(count: number): string[] {
+    if (count <= 0) return [];
     const chars = config.hintChars.toUpperCase();
-    const hints: string[] = [''];
-    let offset = 0;
+    const base = chars.length;
 
-    // BFS-style generation: build hints level by level
-    while (hints.length - offset < count || offset === 0) {
-      const prefix = hints[offset++];
-      for (let i = 0; i < chars.length; i++) {
-        hints.push(prefix + chars[i]);
-      }
+    let length = 1;
+    let capacity = base;
+    while (capacity < count) {
+      length += 1;
+      capacity *= base;
     }
 
-    // Skip shorter hints, return only uniform-length hints
-    return hints.slice(offset, offset + count).map(h => h.toLowerCase());
+    const hints: string[] = [];
+    for (let i = 0; i < count; i++) {
+      let n = i;
+      const digits = new Array<number>(length).fill(0);
+      for (let pos = length - 1; pos >= 0; pos -= 1) {
+        digits[pos] = n % base;
+        n = Math.floor(n / base);
+      }
+      hints.push(digits.map(d => chars[d]).join('').toLowerCase());
+    }
+
+    return hints;
   }
 
   #createLabel(text: string): HTMLElement {
@@ -675,5 +787,6 @@ class LinkHints {
 }
 
 // Initialize
+setupStealFocusOnLoad();
 const linkHints = new LinkHints();
 new KeyBindings(linkHints);

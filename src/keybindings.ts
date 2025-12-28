@@ -1,6 +1,6 @@
 // Vim-style key binding handler
 
-import { keyBindingConfig, type KeyBinding } from './config';
+import { appConfig, type KeyBinding } from './config';
 
 // Trie node for efficient prefix matching
 interface TrieNode {
@@ -78,6 +78,10 @@ class KeySequenceHandler {
     this.#buffer = '';
   }
 
+  isIdle(): boolean {
+    return this.#buffer.length === 0;
+  }
+
   #findNode(keys: string): TrieNode | null {
     let node = this.#trie;
     for (const char of keys) {
@@ -115,12 +119,15 @@ interface LinkHintsInterface {
 export class KeyBindings {
   #handler: KeySequenceHandler;
   #linkHints: LinkHintsInterface;
+  #lastInputIndex = -1;
+  #countBuffer = '';
+  #countTimeoutId: number | null = null;
 
   constructor(linkHints: LinkHintsInterface) {
     this.#linkHints = linkHints;
     this.#handler = new KeySequenceHandler(
-      keyBindingConfig.bindings,
-      keyBindingConfig.timeout
+      appConfig.keyBindings.bindings,
+      appConfig.keyBindings.timeout
     );
     this.#setupKeyListener();
   }
@@ -133,8 +140,16 @@ export class KeyBindings {
       // Escape should blur focused editable elements
       if (e.key === 'Escape' && this.#isEditableActive()) {
         const active = document.activeElement as HTMLElement | null;
-        active?.blur();
+        if (active) {
+          // Delay blur so page handlers see Escape on the focused element first.
+          window.setTimeout(() => {
+            if (document.activeElement === active) {
+              active.blur();
+            }
+          }, 0);
+        }
         this.#handler.reset();
+        this.#resetCount();
         return;
       }
 
@@ -150,27 +165,41 @@ export class KeyBindings {
       // Escape clears buffer
       if (e.key === 'Escape') {
         this.#handler.reset();
+        this.#resetCount();
+        return;
+      }
+
+      // Handle numeric count prefixes (e.g., 3gi)
+      if (/^\d$/.test(e.key) && this.#handler.isIdle()) {
+        this.#appendCount(e.key);
+        e.preventDefault();
+        e.stopPropagation();
         return;
       }
 
       const result = this.#handler.handleKey(e.key);
 
       if (result.result === 'match' && result.operation) {
+        const hasCount = this.#countBuffer.length > 0;
+        const count = this.#consumeCount();
         e.preventDefault();
         e.stopPropagation();
-        this.#executeOperation(result.operation);
+        this.#executeOperation(result.operation, count, hasCount);
       } else if (result.result === 'partial') {
         e.preventDefault();
         e.stopPropagation();
+      } else {
+        // No match; drop any pending count so it doesn't leak to later commands.
+        this.#resetCount();
       }
       // 'none' - let event propagate normally
     }, true);
   }
 
-  #executeOperation(operation: string): void {
+  #executeOperation(operation: string, count = 1, hasCount = false): void {
     if (operation.startsWith('tab:')) {
       // Send to background script
-      chrome.runtime.sendMessage({ type: 'tab-operation', operation });
+      chrome.runtime.sendMessage({ type: 'tab-operation', operation, count });
     } else if (operation === 'hints:activate') {
       this.#linkHints.activate('normal');
     } else if (operation === 'hints:newTab') {
@@ -182,10 +211,116 @@ export class KeyBindings {
     } else if (operation === 'scroll:bottom') {
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
     } else if (operation === 'scroll:half-down') {
-      window.scrollBy({ top: window.innerHeight / 2, behavior: 'smooth' });
+      const steps = Math.max(1, count);
+      window.scrollBy({ top: (window.innerHeight / 2) * steps, behavior: 'smooth' });
     } else if (operation === 'scroll:half-up') {
-      window.scrollBy({ top: -window.innerHeight / 2, behavior: 'smooth' });
+      const steps = Math.max(1, count);
+      window.scrollBy({ top: (-window.innerHeight / 2) * steps, behavior: 'smooth' });
+    } else if (operation === 'focus:input') {
+      this.#focusNextInput(count, hasCount);
     }
+  }
+
+  #focusNextInput(count = 1, hasCount = false): void {
+    const inputs = this.#getTextInputs();
+    if (inputs.length === 0) return;
+
+    let nextIndex = 0;
+    if (hasCount) {
+      const normalized = Math.max(1, count);
+      nextIndex = (normalized - 1) % inputs.length;
+    } else {
+      const active = document.activeElement as HTMLElement | null;
+      const activeIndex = active ? inputs.indexOf(active) : -1;
+
+      if (activeIndex >= 0) {
+        nextIndex = activeIndex + 1;
+      } else if (this.#lastInputIndex >= 0 && this.#lastInputIndex < inputs.length) {
+        nextIndex = this.#lastInputIndex + 1;
+      }
+
+      if (nextIndex >= inputs.length) nextIndex = 0;
+    }
+    const target = inputs[nextIndex];
+
+    try {
+      target.focus();
+      target.scrollIntoView({ block: 'center', inline: 'center' });
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+        const valueLength = target.value?.length ?? 0;
+        target.setSelectionRange(valueLength, valueLength);
+      }
+    } catch {
+      // Ignore focus errors on protected inputs
+    }
+
+    this.#lastInputIndex = inputs.indexOf(target);
+  }
+
+  #appendCount(digit: string): void {
+    this.#countBuffer += digit;
+    this.#startCountTimeout();
+  }
+
+  #consumeCount(): number {
+    const count = parseInt(this.#countBuffer, 10);
+    this.#resetCount();
+    return Number.isNaN(count) ? 1 : count;
+  }
+
+  #resetCount(): void {
+    if (this.#countTimeoutId !== null) {
+      window.clearTimeout(this.#countTimeoutId);
+      this.#countTimeoutId = null;
+    }
+    this.#countBuffer = '';
+  }
+
+  #startCountTimeout(): void {
+    if (this.#countTimeoutId !== null) {
+      window.clearTimeout(this.#countTimeoutId);
+    }
+    this.#countTimeoutId = window.setTimeout(() => {
+      this.#countBuffer = '';
+      this.#countTimeoutId = null;
+    }, appConfig.keyBindings.timeout);
+  }
+
+  #getTextInputs(): HTMLElement[] {
+    const nodes = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        'input, textarea, [contenteditable="true"], [contenteditable=""], [role="textbox"]'
+      )
+    );
+
+    return nodes.filter((el) => this.#isFocusableInput(el));
+  }
+
+  #isFocusableInput(el: HTMLElement): boolean {
+    if (!el.isConnected) return false;
+    if (el instanceof HTMLInputElement && el.disabled) return false;
+
+    const tag = el.tagName;
+    if (tag === 'INPUT') {
+      const type = (el as HTMLInputElement).type;
+      if (/^(button|checkbox|file|hidden|image|radio|reset|submit)$/i.test(type)) {
+        return false;
+      }
+    } else if (tag !== 'TEXTAREA' && !el.isContentEditable && el.getAttribute('role') !== 'textbox') {
+      return false;
+    }
+
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    if (rect.bottom <= 0 || rect.top >= window.innerHeight) return false;
+    if (rect.right <= 0 || rect.left >= window.innerWidth) return false;
+
+    const style = window.getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
+    const opacity = parseFloat(style.opacity);
+    if (!Number.isNaN(opacity) && opacity <= 0.1) return false;
+
+    return true;
   }
 
   #isEditableActive(): boolean {
