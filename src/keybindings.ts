@@ -185,16 +185,16 @@ export class KeyBindings {
 
 				const result = this.#handler.handleKey(e.key);
 
-		if (result.result === 'match' && result.binding) {
-			const hasCount = this.#countBuffer.length > 0;
-			const count = this.#consumeCount();
-			const repeatable = result.binding.repeatable === true;
-			const effectiveCount = repeatable ? count : 1;
-			const effectiveHasCount = repeatable ? hasCount : false;
-			e.preventDefault();
-			e.stopPropagation();
-			this.#executeOperation(result.binding.operation, effectiveCount, effectiveHasCount);
-		} else if (result.result === 'partial') {
+				if (result.result === 'match' && result.binding) {
+					const hasCount = this.#countBuffer.length > 0;
+					const count = this.#consumeCount();
+					const repeatable = result.binding.repeatable === true;
+					const effectiveCount = repeatable ? count : 1;
+					const effectiveHasCount = repeatable ? hasCount : false;
+					e.preventDefault();
+					e.stopPropagation();
+					this.#executeOperation(result.binding.operation, effectiveCount, effectiveHasCount);
+				} else if (result.result === 'partial') {
 					e.preventDefault();
 					e.stopPropagation();
 				} else {

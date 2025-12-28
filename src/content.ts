@@ -1,7 +1,7 @@
 // Optimized link hints implementation
 
-import { KeyBindings } from './keybindings';
 import { appConfig } from './config';
+import { KeyBindings } from './keybindings';
 
 // ============================================================================
 // Types

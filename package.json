@@ -5,9 +5,15 @@
 	"scripts": {
 		"build": "bun build src/content.ts --outfile=dist/content.js && bun build src/background.ts --outfile=dist/background.js && cp ./manifest.json ./hints.css ./dist/ && cp -r ./icons ./dist/",
 		"icons:generate": "bash scripts/generate-icons.sh",
+		"hooks:install": "git config core.hooksPath .githooks",
 		"format": "biome format --write .",
-		"format:check": "biome format --check .",
+		"format:check": "biome format .",
 		"lint": "biome lint .",
+		"lint:fix": "biome lint --write .",
+		"fix:staged": "sh -c 'test -n \"$(git diff --cached --name-only --diff-filter=ACMR)\" && git diff --cached --name-only -z --diff-filter=ACMR | xargs -0 biome check --write && git diff --cached --name-only -z --diff-filter=ACMR | xargs -0 biome format --write && git diff --cached --name-only -z --diff-filter=ACMR | xargs -0 git add --'",
+		"check:staged": "sh -c 'test -n \"$(git diff --cached --name-only --diff-filter=ACMR)\" && git diff --cached --name-only -z --diff-filter=ACMR | xargs -0 biome check'",
+		"ci": "bun run typecheck && bun run lint && bun run format:check && bun run build",
+		"fix": "biome check --write . && biome format --write . && tsc --noEmit",
 		"watch": "tsc --watch",
 		"typecheck": "tsc --noEmit"
 	},
