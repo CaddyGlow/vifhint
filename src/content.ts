@@ -652,6 +652,7 @@ class LinkHints {
 	#currentInput = '';
 	#inputDisplay: HTMLElement | null = null;
 	#mode: HintMode = 'normal';
+	#resizeTimeoutId: number | null = null;
 
 	constructor() {
 		this.#setupKeyListener();
@@ -743,6 +744,7 @@ class LinkHints {
 
 		// Create input display
 		this.#createInputDisplay();
+		this.#attachResizeListener();
 
 		const timings: Record<string, number> = {};
 		const mark = (label: string): void => {
@@ -818,6 +820,7 @@ class LinkHints {
 	#deactivate(): void {
 		this.#active = false;
 		this.#currentInput = '';
+		this.#detachResizeListener();
 		for (const hint of this.#hints) {
 			hint.label.remove();
 			hint.element.classList.remove('link-hint-target');
@@ -829,6 +832,30 @@ class LinkHints {
 			this.#inputDisplay = null;
 		}
 	}
+
+	#attachResizeListener(): void {
+		window.addEventListener('resize', this.#onResize);
+	}
+
+	#detachResizeListener(): void {
+		window.removeEventListener('resize', this.#onResize);
+		if (this.#resizeTimeoutId !== null) {
+			window.clearTimeout(this.#resizeTimeoutId);
+			this.#resizeTimeoutId = null;
+		}
+	}
+
+	#onResize = (): void => {
+		if (!this.#active) return;
+		if (this.#resizeTimeoutId !== null) {
+			window.clearTimeout(this.#resizeTimeoutId);
+		}
+		this.#resizeTimeoutId = window.setTimeout(() => {
+			this.#resizeTimeoutId = null;
+			this.#deactivate();
+			this.#activate();
+		}, 120);
+	};
 
 	#generateHints(count: number): string[] {
 		if (count <= 0) return [];
