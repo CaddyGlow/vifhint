@@ -44,19 +44,39 @@ bun run build
 
 ### Change Hint Characters
 
-Edit `src/content.ts` and modify the `hintChars` property:
+Edit `src/content.ts` and modify `config.hintChars`:
 
 ```typescript
-private hintChars = 'asdfghjkl'; // Change to your preferred characters
+const config: HintConfig = {
+	hintChars: 'asdfghjkl', // Change to your preferred characters
+	// ...
+};
 ```
 
-### Settings
+### Keymaps and Notation
 
-Edit `src/settings.ts` to tweak defaults:
+Keymaps live in `src/config.ts` under `appConfig.keymaps`. They use nvim-style key notation:
 
-| Setting | Default | Description |
+- `<leader>` (defaults to space via `appConfig.options.leader`)
+- `<Esc>`, `<CR>`, `<Tab>`, `<BS>`
+- `<C-x>`, `<A-x>`, `<S-Tab>` for modifiers
+
+Example:
+
+```typescript
+{ lhs: '<leader>nh', rhs: 'find:nohl', desc: 'Clear search highlights', repeatable: false },
+```
+
+### Options
+
+Edit `src/config.ts` to tweak defaults:
+
+| Option | Default | Description |
 | --- | --- | --- |
-| `settings.stealFocusOnLoad` | `true` | Prevent focus on inputs when the page loads so you can use link hints without pressing `Esc`. |
+| `options.leader` | `' '` | Leader key for `<leader>` mappings. |
+| `options.timeoutlen` | `500` | Time to wait for the next key in a sequence (ms). |
+| `options.noautofocus` | `true` | Prevent focus on inputs when the page loads. |
+| `options.findmode` | `'custom'` | `native` uses the browser find UI when supported. |
 
 ### Change Hint Styling
 

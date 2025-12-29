@@ -1,65 +1,79 @@
 // Vim-style key binding handler
 
 import { appConfig } from './config';
+import { type KeyToken, eventToKeyToken, parseKeySequence } from './key-notation';
 
-type KeyBinding = (typeof appConfig.keyBindings.bindings)[number];
+type Keymap = (typeof appConfig.keymaps)[number];
+type NormalizedKeymap = Keymap & { sequence: readonly KeyToken[] };
 
 // Trie node for efficient prefix matching
 interface TrieNode {
 	children: Map<string, TrieNode>;
-	binding?: KeyBinding;
+	binding?: NormalizedKeymap;
 }
 
-// Build trie from bindings
-function buildTrie(bindings: readonly KeyBinding[]): TrieNode {
+// Build trie from keymaps
+function buildTrie(keymaps: readonly NormalizedKeymap[]): TrieNode {
 	const root: TrieNode = { children: new Map() };
 
-	for (const binding of bindings) {
+	for (const keymap of keymaps) {
 		let node = root;
-		for (const char of binding.keys) {
-			let child = node.children.get(char);
+		for (const token of keymap.sequence) {
+			let child = node.children.get(token);
 			if (!child) {
 				child = { children: new Map() };
-				node.children.set(char, child);
+				node.children.set(token, child);
 			}
 			node = child;
 		}
-		node.binding = binding;
+		node.binding = keymap;
 	}
 
 	return root;
 }
 
+function normalizeKeymaps(keymaps: readonly Keymap[], leader: string): NormalizedKeymap[] {
+	return keymaps
+		.map((keymap) => ({
+			...keymap,
+			sequence: parseKeySequence(keymap.lhs, leader),
+		}))
+		.filter((keymap) => keymap.sequence.length > 0);
+}
+
 // Key sequence handler with trie-based matching
 class KeySequenceHandler {
 	#trie: TrieNode;
-	#buffer = '';
+	#buffer: KeyToken[] = [];
 	#timeoutId: number | null = null;
 	#timeout: number;
 
-	constructor(bindings: readonly KeyBinding[], timeout: number) {
-		this.#trie = buildTrie(bindings);
+	constructor(keymaps: readonly NormalizedKeymap[], timeout: number) {
+		this.#trie = buildTrie(keymaps);
 		this.#timeout = timeout;
 	}
 
-	handleKey(key: string): { result: 'match' | 'partial' | 'none'; binding?: KeyBinding } {
+	handleKey(token: KeyToken): {
+		result: 'match' | 'partial' | 'none';
+		binding?: NormalizedKeymap;
+	} {
 		this.#clearTimeout();
-		this.#buffer += key;
+		this.#buffer.push(token);
 
 		const node = this.#findNode(this.#buffer);
 
 		if (!node) {
 			// No match - try with just this key
-			this.#buffer = key;
+			this.#buffer = [token];
 			const singleNode = this.#findNode(this.#buffer);
 
 			if (!singleNode) {
-				this.#buffer = '';
+				this.#buffer = [];
 				return { result: 'none' };
 			}
 
 			if (singleNode.binding) {
-				this.#buffer = '';
+				this.#buffer = [];
 				return { result: 'match', binding: singleNode.binding };
 			}
 
@@ -68,7 +82,7 @@ class KeySequenceHandler {
 		}
 
 		if (node.binding) {
-			this.#buffer = '';
+			this.#buffer = [];
 			return { result: 'match', binding: node.binding };
 		}
 
@@ -79,17 +93,17 @@ class KeySequenceHandler {
 
 	reset(): void {
 		this.#clearTimeout();
-		this.#buffer = '';
+		this.#buffer = [];
 	}
 
 	isIdle(): boolean {
 		return this.#buffer.length === 0;
 	}
 
-	#findNode(keys: string): TrieNode | null {
+	#findNode(tokens: readonly KeyToken[]): TrieNode | null {
 		let node = this.#trie;
-		for (const char of keys) {
-			const child = node.children.get(char);
+		for (const token of tokens) {
+			const child = node.children.get(token);
 			if (!child) return null;
 			node = child;
 		}
@@ -98,7 +112,7 @@ class KeySequenceHandler {
 
 	#startTimeout(): void {
 		this.#timeoutId = window.setTimeout(() => {
-			this.#buffer = '';
+			this.#buffer = [];
 		}, this.#timeout);
 	}
 
@@ -124,7 +138,17 @@ interface SelectionController {
 	expand(): void;
 	shrink(): void;
 	toggle(): void;
+	toggleLinewise(): void;
 	yank(): void;
+	moveWord(direction: 'forward' | 'backward', count?: number): void;
+	moveWordEnd(count?: number): void;
+	moveBigWord(direction: 'forward' | 'backward', count?: number): void;
+	moveLine(boundary: 'start' | 'first' | 'end', count?: number): void;
+	moveParagraph(direction: 'prev' | 'next', count?: number): void;
+	selectTextObject(kind: 'word' | 'paragraph', around: boolean): void;
+	moveCaret(direction: 'left' | 'right' | 'up' | 'down', count?: number): void;
+	swapSelectionEndpoint(): void;
+	getWordUnderCaret(): string | null;
 }
 
 // Interface for in-page search
@@ -132,8 +156,10 @@ interface SearchController {
 	open(): void;
 	next(count?: number): void;
 	prev(count?: number): void;
+	searchWord(query: string, direction: 'next' | 'prev', count?: number): void;
 	isActive(): boolean;
 	close(): void;
+	clearHighlights(): void;
 }
 
 // Interface for key bindings overlay
@@ -159,13 +185,14 @@ export class KeyBindings {
 		selection: SelectionController,
 		search?: SearchController,
 		helpOverlay?: HelpOverlayController,
-		bindings: readonly KeyBinding[] = appConfig.keyBindings.bindings,
+		keymaps: readonly Keymap[] = appConfig.keymaps,
 	) {
 		this.#linkHints = linkHints;
 		this.#selection = selection;
 		this.#search = search ?? null;
 		this.#helpOverlay = helpOverlay ?? null;
-		this.#handler = new KeySequenceHandler(bindings, appConfig.keyBindings.timeout);
+		const normalized = normalizeKeymaps(keymaps, appConfig.options.leader);
+		this.#handler = new KeySequenceHandler(normalized, appConfig.options.timeoutlen);
 		this.#setupKeyListener();
 	}
 
@@ -173,10 +200,10 @@ export class KeyBindings {
 		document.addEventListener(
 			'keydown',
 			(e) => {
-				const key = e.key === '/' && e.shiftKey ? '?' : e.key;
+				const token = eventToKeyToken(e);
 
 				if (this.#helpOverlay?.isVisible()) {
-					if (key === 'Escape' || key === '?') {
+					if (token === '<Esc>' || token === '?') {
 						this.#helpOverlay.hide();
 						e.preventDefault();
 						e.stopPropagation();
@@ -189,7 +216,7 @@ export class KeyBindings {
 				}
 
 				if (this.#search?.isActive()) {
-					if (key === 'Escape') {
+					if (token === '<Esc>') {
 						this.#search.close();
 						e.preventDefault();
 						e.stopPropagation();
@@ -201,7 +228,7 @@ export class KeyBindings {
 				if (this.#linkHints.isActive()) return;
 
 				// Escape should blur focused editable elements
-				if (key === 'Escape' && this.#isEditableActive()) {
+				if (token === '<Esc>' && this.#isEditableActive()) {
 					const active = document.activeElement as HTMLElement | null;
 					if (active) {
 						// Delay blur so page handlers see Escape on the focused element first.
@@ -219,28 +246,29 @@ export class KeyBindings {
 				// Skip if in editable element
 				if (this.#isEditableActive()) return;
 
-				// Skip if modifier keys (except Shift for case sensitivity)
-				if (e.ctrlKey || e.altKey || e.metaKey) return;
-
-				// Skip special keys
-				if (key.length > 1 && key !== 'Escape') return;
+				if (!token) return;
 
 				// Escape clears buffer
-				if (key === 'Escape') {
+				if (token === '<Esc>') {
+					this.#search?.clearHighlights();
 					this.#handler.reset();
 					this.#resetCount();
 					return;
 				}
 
-				// Handle numeric count prefixes (e.g., 3gi)
-				if (/^\d$/.test(key) && this.#handler.isIdle()) {
-					this.#appendCount(key);
-					e.preventDefault();
-					e.stopPropagation();
-					return;
+				// Handle numeric count prefixes (e.g., 3gi). Allow bare "0" as a command.
+				if (/^\d$/.test(token) && this.#handler.isIdle()) {
+					if (token === '0' && this.#countBuffer.length === 0) {
+						// Let "0" fall through to bindings (Vim-style).
+					} else {
+						this.#appendCount(token);
+						e.preventDefault();
+						e.stopPropagation();
+						return;
+					}
 				}
 
-				const result = this.#handler.handleKey(key);
+				const result = this.#handler.handleKey(token);
 
 				if (result.result === 'match' && result.binding) {
 					const hasCount = this.#countBuffer.length > 0;
@@ -250,7 +278,7 @@ export class KeyBindings {
 					const effectiveHasCount = repeatable ? hasCount : false;
 					e.preventDefault();
 					e.stopPropagation();
-					this.#executeOperation(result.binding.operation, effectiveCount, effectiveHasCount);
+					this.#executeOperation(result.binding.rhs, effectiveCount, effectiveHasCount);
 				} else if (result.result === 'partial') {
 					e.preventDefault();
 					e.stopPropagation();
@@ -264,7 +292,7 @@ export class KeyBindings {
 		);
 	}
 
-	#executeOperation(operation: KeyBinding['operation'], count = 1, hasCount = false): void {
+	#executeOperation(operation: Keymap['rhs'], count = 1, hasCount = false): void {
 		if (operation.startsWith('tab:')) {
 			// Send to background script
 			chrome.runtime.sendMessage({ type: 'tab-operation', operation, count });
@@ -278,6 +306,8 @@ export class KeyBindings {
 			window.scrollTo({ top: 0, behavior: 'smooth' });
 		} else if (operation === 'scroll:bottom') {
 			window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+		} else if (operation === 'scroll:center') {
+			this.#scrollToCenter();
 		} else if (operation === 'scroll:half-down') {
 			const steps = Math.max(1, count);
 			window.scrollBy({ top: (window.innerHeight / 2) * steps, behavior: 'smooth' });
@@ -300,6 +330,52 @@ export class KeyBindings {
 			this.#selection.yank();
 		} else if (operation === 'selection:toggle') {
 			this.#selection.toggle();
+		} else if (operation === 'selection:line-toggle') {
+			this.#selection.toggleLinewise();
+		} else if (operation === 'selection:swap') {
+			this.#selection.swapSelectionEndpoint();
+		} else if (operation === 'motion:word-forward') {
+			this.#selection.moveWord('forward', count);
+		} else if (operation === 'motion:word-back') {
+			this.#selection.moveWord('backward', count);
+		} else if (operation === 'motion:word-end') {
+			this.#selection.moveWordEnd(count);
+		} else if (operation === 'motion:WORD-forward') {
+			this.#selection.moveBigWord('forward', count);
+		} else if (operation === 'motion:WORD-back') {
+			this.#selection.moveBigWord('backward', count);
+		} else if (operation === 'motion:line-start') {
+			this.#selection.moveLine('start', count);
+		} else if (operation === 'motion:line-first') {
+			this.#selection.moveLine('first', count);
+		} else if (operation === 'motion:line-end') {
+			this.#selection.moveLine('end', count);
+		} else if (operation === 'motion:paragraph-prev') {
+			this.#selection.moveParagraph('prev', count);
+		} else if (operation === 'motion:paragraph-next') {
+			this.#selection.moveParagraph('next', count);
+		} else if (operation === 'textobj:word-inner') {
+			this.#selection.selectTextObject('word', false);
+		} else if (operation === 'textobj:word-around') {
+			this.#selection.selectTextObject('word', true);
+		} else if (operation === 'textobj:paragraph-inner') {
+			this.#selection.selectTextObject('paragraph', false);
+		} else if (operation === 'textobj:paragraph-around') {
+			this.#selection.selectTextObject('paragraph', true);
+		} else if (operation === 'search:word-next') {
+			const word = this.#selection.getWordUnderCaret();
+			if (word) this.#search?.searchWord(word, 'next', count);
+		} else if (operation === 'search:word-prev') {
+			const word = this.#selection.getWordUnderCaret();
+			if (word) this.#search?.searchWord(word, 'prev', count);
+		} else if (operation === 'caret:move-left') {
+			this.#selection.moveCaret('left', count);
+		} else if (operation === 'caret:move-right') {
+			this.#selection.moveCaret('right', count);
+		} else if (operation === 'caret:move-up') {
+			this.#selection.moveCaret('up', count);
+		} else if (operation === 'caret:move-down') {
+			this.#selection.moveCaret('down', count);
 		} else if (operation === 'find:open') {
 			this.#search?.open();
 		} else if (operation === 'find:next') {
@@ -308,6 +384,8 @@ export class KeyBindings {
 		} else if (operation === 'find:prev') {
 			const steps = Math.max(1, count);
 			this.#search?.prev(steps);
+		} else if (operation === 'find:nohl') {
+			this.#search?.clearHighlights();
 		} else if (operation === 'help:toggle') {
 			this.#helpOverlay?.toggle();
 		}
@@ -349,6 +427,49 @@ export class KeyBindings {
 		this.#lastInputIndex = inputs.indexOf(target);
 	}
 
+	#scrollToCenter(): void {
+		const selection = window.getSelection();
+		let rect: DOMRect | null = null;
+
+		if (selection && selection.rangeCount > 0) {
+			const range = selection.getRangeAt(0);
+			const clientRects = range.getClientRects();
+			rect = clientRects.length > 0 ? clientRects[0] : range.getBoundingClientRect();
+		}
+
+		if (!rect || (rect.width === 0 && rect.height === 0)) {
+			const highlight = document.querySelector<HTMLElement>(
+				'.hint-find-highlight-current, .hint-find-highlight',
+			);
+			if (highlight) {
+				rect = highlight.getBoundingClientRect();
+			}
+		}
+
+		if (!rect || (rect.width === 0 && rect.height === 0)) {
+			const active = document.activeElement as HTMLElement | null;
+			if (
+				active &&
+				active !== document.body &&
+				active !== document.documentElement &&
+				active.getBoundingClientRect
+			) {
+				rect = active.getBoundingClientRect();
+			}
+		}
+
+		if (!rect || (rect.width === 0 && rect.height === 0)) return;
+
+		const targetY = rect.top + window.scrollY + rect.height / 2;
+		const targetX = rect.left + window.scrollX + rect.width / 2;
+
+		window.scrollTo({
+			top: Math.max(0, targetY - window.innerHeight / 2),
+			left: Math.max(0, targetX - window.innerWidth / 2),
+			behavior: 'smooth',
+		});
+	}
+
 	#appendCount(digit: string): void {
 		this.#countBuffer += digit;
 		this.#startCountTimeout();
@@ -375,7 +496,7 @@ export class KeyBindings {
 		this.#countTimeoutId = window.setTimeout(() => {
 			this.#countBuffer = '';
 			this.#countTimeoutId = null;
-		}, appConfig.keyBindings.timeout);
+		}, appConfig.options.timeoutlen);
 	}
 
 	#getTextInputs(): HTMLElement[] {
