@@ -1,5 +1,24 @@
 // Background script to handle keyboard shortcuts and tab operations
 
+import { PluginHost } from './plugins/host';
+import { pluginRegistry } from './plugins/registry';
+import type { UiApi } from './plugins/types';
+
+const ui: UiApi = {
+	toast: (message) => {
+		console.log(`[plugin toast] ${message}`);
+	},
+};
+
+const pluginHost = new PluginHost({
+	context: 'background',
+	registry: pluginRegistry,
+	ui,
+});
+
+void pluginHost.activateStartup();
+pluginHost.emit('page:ready', undefined);
+
 // Handle Chrome keyboard shortcuts
 chrome.commands.onCommand.addListener((command) => {
 	if (command === 'activate-hints') {

@@ -1,4 +1,5 @@
 import { isEditable } from './content-dom';
+import type { HintMode } from './types';
 
 interface ElementData {
 	readonly element: HTMLElement;
@@ -17,7 +18,10 @@ interface HintElement {
 
 type HintAlign = 'left' | 'center' | 'right';
 
-type HintMode = 'normal' | 'newTab' | 'backgroundTab';
+type LinkHintsOptions = {
+	readonly onActivate?: (mode: HintMode) => void;
+	readonly onDeactivate?: () => void;
+};
 
 interface HintConfig {
 	readonly hintChars: string;
@@ -212,19 +216,23 @@ function isAccessible(element: HTMLElement, rect: DOMRect): boolean {
 }
 
 function filterOverlaps(elements: ElementData[]): ElementData[] {
+	if (elements.length <= 1) return elements;
 	return elements.filter(({ element, rect }) => {
 		return isAccessible(element, rect);
 	});
 }
 
 function collectClickableElements(): ElementData[] {
+	const root = document.body ?? document.documentElement;
+	if (!root) return [];
+
 	const results: ElementData[] = [];
 	const viewportWidth = window.innerWidth;
 	const viewportHeight = window.innerHeight;
 	const hoverElements = findHoverElements();
 	const shadowRoots: ShadowRoot[] = [];
 
-	const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, {
+	const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, {
 		acceptNode(node) {
 			const el = node as HTMLElement;
 			if (!el.offsetWidth || !el.offsetHeight) return NodeFilter.FILTER_SKIP;
@@ -333,8 +341,12 @@ export class LinkHints {
 	#activeHintIndices: number[] = [];
 	#hintMap = new Map<string, number>();
 	#hintLength = 0;
+	#onActivate?: (mode: HintMode) => void;
+	#onDeactivate?: () => void;
 
-	constructor() {
+	constructor(options: LinkHintsOptions = {}) {
+		this.#onActivate = options.onActivate;
+		this.#onDeactivate = options.onDeactivate;
 		this.#setupKeyListener();
 		this.#setupCommandListener();
 	}
@@ -416,6 +428,7 @@ export class LinkHints {
 
 	#activate(): void {
 		this.#active = true;
+		this.#onActivate?.(this.#mode);
 		this.#currentInput = '';
 		this.#lastInput = '';
 		this.#activeHintIndices = [];
@@ -504,6 +517,7 @@ export class LinkHints {
 
 	#deactivate(): void {
 		this.#active = false;
+		this.#onDeactivate?.();
 		this.#currentInput = '';
 		this.#lastInput = '';
 		this.#activeHintIndices = [];

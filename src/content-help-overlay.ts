@@ -1,7 +1,5 @@
-import { appConfig } from './config';
+import { type Keymap, appConfig } from './config';
 import { formatKeySequenceForDisplay } from './key-notation';
-
-type Keymap = (typeof appConfig.keymaps)[number];
 
 type HelpGroup =
 	| 'Help'
@@ -57,11 +55,23 @@ function createKeyCaps(lhs: string): HTMLElement {
 
 export class HelpOverlay {
 	#overlay: HTMLDivElement;
-	#bindings: readonly Keymap[];
+	#bindings: Keymap[];
 
 	constructor(bindings: readonly Keymap[]) {
-		this.#bindings = bindings;
+		this.#bindings = [...bindings];
 		this.#overlay = this.#buildOverlay();
+	}
+
+	setBindings(bindings: readonly Keymap[]): void {
+		this.#bindings = [...bindings];
+		const wasVisible = this.isVisible();
+		if (this.#overlay.isConnected) {
+			this.#overlay.remove();
+		}
+		this.#overlay = this.#buildOverlay();
+		if (wasVisible) {
+			this.show();
+		}
 	}
 
 	toggle(): void {

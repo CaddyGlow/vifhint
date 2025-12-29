@@ -77,6 +77,7 @@ Edit `src/config.ts` to tweak defaults:
 | `options.timeoutlen` | `500` | Time to wait for the next key in a sequence (ms). |
 | `options.noautofocus` | `true` | Prevent focus on inputs when the page loads. |
 | `options.findmode` | `'custom'` | `native` uses the browser find UI when supported. |
+| `options.scroll` | `0.5` | Scroll amount for `d`/`u` as a fraction of the viewport height. |
 
 ### Change Hint Styling
 

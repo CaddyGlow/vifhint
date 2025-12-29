@@ -1,10 +1,18 @@
 // Vim-style key binding handler
 
-import { appConfig } from './config';
+import { type Keymap, appConfig } from './config';
 import { type KeyToken, eventToKeyToken, parseKeySequence } from './key-notation';
+import type { KeySequenceEvent } from './plugins/types';
+import type { HintMode } from './types';
 
-type Keymap = (typeof appConfig.keymaps)[number];
 type NormalizedKeymap = Keymap & { sequence: readonly KeyToken[] };
+
+type CommandExecutor = {
+	isRegistered(command: string): boolean;
+	execute(command: string, count: number, hasCount: boolean): void | Promise<void>;
+};
+
+type KeySequenceListener = (event: KeySequenceEvent) => void;
 
 // Trie node for efficient prefix matching
 interface TrieNode {
@@ -56,6 +64,7 @@ class KeySequenceHandler {
 	handleKey(token: KeyToken): {
 		result: 'match' | 'partial' | 'none';
 		binding?: NormalizedKeymap;
+		sequence: readonly KeyToken[];
 	} {
 		this.#clearTimeout();
 		this.#buffer.push(token);
@@ -69,26 +78,30 @@ class KeySequenceHandler {
 
 			if (!singleNode) {
 				this.#buffer = [];
-				return { result: 'none' };
+				return { result: 'none', sequence: [] };
 			}
 
 			if (singleNode.binding) {
 				this.#buffer = [];
-				return { result: 'match', binding: singleNode.binding };
+				return {
+					result: 'match',
+					binding: singleNode.binding,
+					sequence: singleNode.binding.sequence,
+				};
 			}
 
 			this.#startTimeout();
-			return { result: 'partial' };
+			return { result: 'partial', sequence: [...this.#buffer] };
 		}
 
 		if (node.binding) {
 			this.#buffer = [];
-			return { result: 'match', binding: node.binding };
+			return { result: 'match', binding: node.binding, sequence: node.binding.sequence };
 		}
 
 		// Partial match - wait for more keys
 		this.#startTimeout();
-		return { result: 'partial' };
+		return { result: 'partial', sequence: [...this.#buffer] };
 	}
 
 	reset(): void {
@@ -124,9 +137,6 @@ class KeySequenceHandler {
 	}
 }
 
-// Hint modes
-type HintMode = 'normal' | 'newTab' | 'backgroundTab';
-
 // Interface for LinkHints integration
 interface LinkHintsInterface {
 	isActive(): boolean;
@@ -147,6 +157,7 @@ interface SelectionController {
 	moveParagraph(direction: 'prev' | 'next', count?: number): void;
 	selectTextObject(kind: 'word' | 'paragraph', around: boolean): void;
 	moveCaret(direction: 'left' | 'right' | 'up' | 'down', count?: number): void;
+	scrollAndFollow(deltaY: number): void;
 	swapSelectionEndpoint(): void;
 	getWordUnderCaret(): string | null;
 }
@@ -176,6 +187,9 @@ export class KeyBindings {
 	#selection: SelectionController;
 	#search: SearchController | null;
 	#helpOverlay: HelpOverlayController | null;
+	#commandExecutor: CommandExecutor | null = null;
+	#onKeySequence: KeySequenceListener | null = null;
+	#keymaps: Keymap[];
 	#lastInputIndex = -1;
 	#countBuffer = '';
 	#countTimeoutId: number | null = null;
@@ -186,14 +200,28 @@ export class KeyBindings {
 		search?: SearchController,
 		helpOverlay?: HelpOverlayController,
 		keymaps: readonly Keymap[] = appConfig.keymaps,
+		options?: { commandExecutor?: CommandExecutor; onKeySequence?: KeySequenceListener },
 	) {
 		this.#linkHints = linkHints;
 		this.#selection = selection;
 		this.#search = search ?? null;
 		this.#helpOverlay = helpOverlay ?? null;
-		const normalized = normalizeKeymaps(keymaps, appConfig.options.leader);
+		this.#commandExecutor = options?.commandExecutor ?? null;
+		this.#onKeySequence = options?.onKeySequence ?? null;
+		this.#keymaps = [...keymaps];
+		const normalized = normalizeKeymaps(this.#keymaps, appConfig.options.leader);
 		this.#handler = new KeySequenceHandler(normalized, appConfig.options.timeoutlen);
 		this.#setupKeyListener();
+	}
+
+	registerKeymap(map: Keymap): void {
+		this.#keymaps.push(map);
+		const normalized = normalizeKeymaps(this.#keymaps, appConfig.options.leader);
+		this.#handler = new KeySequenceHandler(normalized, appConfig.options.timeoutlen);
+	}
+
+	getBindings(): readonly Keymap[] {
+		return this.#keymaps;
 	}
 
 	#setupKeyListener(): void {
@@ -205,6 +233,7 @@ export class KeyBindings {
 				if (this.#helpOverlay?.isVisible()) {
 					if (token === '<Esc>' || token === '?') {
 						this.#helpOverlay.hide();
+						this.#onKeySequence?.({ status: 'none' });
 						e.preventDefault();
 						e.stopPropagation();
 						return;
@@ -218,6 +247,7 @@ export class KeyBindings {
 				if (this.#search?.isActive()) {
 					if (token === '<Esc>') {
 						this.#search.close();
+						this.#onKeySequence?.({ status: 'none' });
 						e.preventDefault();
 						e.stopPropagation();
 					}
@@ -240,6 +270,7 @@ export class KeyBindings {
 					}
 					this.#handler.reset();
 					this.#resetCount();
+					this.#onKeySequence?.({ status: 'none' });
 					return;
 				}
 
@@ -248,11 +279,24 @@ export class KeyBindings {
 
 				if (!token) return;
 
+				const hasPendingInput = this.#countBuffer.length > 0 || !this.#handler.isIdle();
+
+				// Escape only cancels an in-progress key sequence/count.
+				if (token === '<Esc>' && hasPendingInput) {
+					this.#handler.reset();
+					this.#resetCount();
+					this.#onKeySequence?.({ status: 'none' });
+					e.preventDefault();
+					e.stopPropagation();
+					return;
+				}
+
 				// Escape clears buffer
 				if (token === '<Esc>') {
 					this.#search?.clearHighlights();
 					this.#handler.reset();
 					this.#resetCount();
+					this.#onKeySequence?.({ status: 'none' });
 					return;
 				}
 
@@ -278,13 +322,20 @@ export class KeyBindings {
 					const effectiveHasCount = repeatable ? hasCount : false;
 					e.preventDefault();
 					e.stopPropagation();
+					this.#onKeySequence?.({
+						status: 'match',
+						sequence: result.binding.lhs,
+						tokens: result.sequence,
+					});
 					this.#executeOperation(result.binding.rhs, effectiveCount, effectiveHasCount);
 				} else if (result.result === 'partial') {
 					e.preventDefault();
 					e.stopPropagation();
+					this.#onKeySequence?.({ status: 'partial', tokens: result.sequence });
 				} else {
 					// No match; drop any pending count so it doesn't leak to later commands.
 					this.#resetCount();
+					this.#onKeySequence?.({ status: 'none' });
 				}
 				// 'none' - let event propagate normally
 			},
@@ -310,10 +361,12 @@ export class KeyBindings {
 			this.#scrollToCenter();
 		} else if (operation === 'scroll:half-down') {
 			const steps = Math.max(1, count);
-			window.scrollBy({ top: (window.innerHeight / 2) * steps, behavior: 'smooth' });
+			const baseStep = Math.max(0, appConfig.options.scroll);
+			this.#selection.scrollAndFollow(window.innerHeight * baseStep * steps);
 		} else if (operation === 'scroll:half-up') {
 			const steps = Math.max(1, count);
-			window.scrollBy({ top: (-window.innerHeight / 2) * steps, behavior: 'smooth' });
+			const baseStep = Math.max(0, appConfig.options.scroll);
+			this.#selection.scrollAndFollow(-window.innerHeight * baseStep * steps);
 		} else if (operation === 'focus:input') {
 			this.#focusNextInput(count, hasCount);
 		} else if (operation === 'selection:expand') {
@@ -388,6 +441,8 @@ export class KeyBindings {
 			this.#search?.clearHighlights();
 		} else if (operation === 'help:toggle') {
 			this.#helpOverlay?.toggle();
+		} else if (this.#commandExecutor?.isRegistered(operation)) {
+			void this.#commandExecutor.execute(operation, count, hasCount);
 		}
 	}
 

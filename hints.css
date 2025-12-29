@@ -235,6 +235,121 @@
 	color: #c9c2ae;
 }
 
+.hint-whichkey {
+	position: fixed;
+	bottom: 16px;
+	right: 16px;
+	z-index: 2147483647;
+	pointer-events: none;
+	opacity: 0;
+	transform: translateY(6px);
+	visibility: hidden;
+	transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+	font-family: "Fira Sans", "Segoe UI", "Helvetica Neue", sans-serif;
+}
+
+.hint-whichkey.is-visible {
+	opacity: 1;
+	transform: translateY(0);
+	visibility: visible;
+}
+
+.hint-whichkey-card {
+	min-width: 220px;
+	max-width: min(360px, calc(100vw - 32px));
+	background: rgba(15, 18, 24, 0.96);
+	color: #f4f1e5;
+	border: 1px solid #2a3240;
+	border-radius: 12px;
+	padding: 12px 14px 14px;
+	box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+}
+
+.hint-whichkey-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	margin-bottom: 10px;
+}
+
+.hint-whichkey-title {
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.6px;
+	text-transform: uppercase;
+	color: #c9c2ae;
+}
+
+.hint-whichkey-prefix {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+}
+
+.hint-whichkey-keys {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+
+.hint-whichkey-keys kbd {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 18px;
+	padding: 2px 6px;
+	border-radius: 5px;
+	border: 1px solid #2f3a4e;
+	background: #141924;
+	color: #ffdd00;
+	font-family: "Fira Code", "Courier New", monospace;
+	font-size: 12px;
+	font-weight: 600;
+	text-transform: none;
+}
+
+.hint-whichkey-list {
+	display: grid;
+	gap: 8px;
+	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	max-height: 240px;
+	overflow: auto;
+	padding-right: 4px;
+}
+
+.hint-whichkey-row {
+	display: grid;
+	grid-template-columns: minmax(24px, auto) 1fr;
+	gap: 8px;
+	align-items: center;
+}
+
+.hint-whichkey-key {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 18px;
+	padding: 2px 6px;
+	border-radius: 5px;
+	border: 1px solid #2f3a4e;
+	background: #141924;
+	color: #ffdd00;
+	font-family: "Fira Code", "Courier New", monospace;
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.hint-whichkey-desc {
+	font-size: 12px;
+	color: #e8e2d1;
+}
+
+.hint-whichkey-desc.is-prefix {
+	color: #a6a0b0;
+	font-style: italic;
+}
+
 .hint-find-bar {
 	position: relative;
 	z-index: 2147483647;

@@ -1,6 +1,6 @@
 // Application configuration
 
-type KeyAction =
+export type CoreCommand =
 	| `tab:${'next' | 'previous' | 'close' | 'new' | 'restore'}`
 	| 'hints:activate'
 	| 'hints:newTab'
@@ -43,9 +43,12 @@ type KeyAction =
 	| 'find:prev'
 	| 'find:nohl';
 
-type Keymap = {
+export type PluginCommandId = `${string}.${string}`;
+export type CommandId = CoreCommand | PluginCommandId;
+
+export type Keymap = {
 	readonly lhs: string;
-	readonly rhs: KeyAction;
+	readonly rhs: CommandId;
 	readonly desc: string;
 	readonly repeatable: boolean;
 };
@@ -53,13 +56,19 @@ type Keymap = {
 type Options = {
 	readonly leader: string;
 	readonly timeoutlen: number;
+	readonly whichkeyDelay: number;
 	readonly noautofocus: boolean;
 	readonly findmode: 'custom' | 'native';
+	readonly scroll: number;
 };
 
 type AppConfig = {
 	readonly keymaps: readonly Keymap[];
 	readonly options: Options;
+	readonly plugins?: Record<
+		string,
+		{ enabled?: boolean; config?: Record<string, unknown>; options?: Record<string, unknown> }
+	>;
 };
 
 export const appConfig: AppConfig = {
@@ -72,8 +81,8 @@ export const appConfig: AppConfig = {
 		{ lhs: 'X', rhs: 'tab:restore', desc: 'Restore closed tab', repeatable: false },
 
 		// Scroll operations
-		{ lhs: 'd', rhs: 'scroll:half-down', desc: 'Scroll half page down', repeatable: true },
-		{ lhs: 'u', rhs: 'scroll:half-up', desc: 'Scroll half page up', repeatable: true },
+		{ lhs: 'd', rhs: 'scroll:half-down', desc: 'Scroll page down', repeatable: true },
+		{ lhs: 'u', rhs: 'scroll:half-up', desc: 'Scroll page up', repeatable: true },
 		{ lhs: 'gg', rhs: 'scroll:top', desc: 'Scroll to top', repeatable: false },
 		{ lhs: 'G', rhs: 'scroll:bottom', desc: 'Scroll to bottom', repeatable: false },
 		{ lhs: 'zz', rhs: 'scroll:center', desc: 'Center on target', repeatable: false },
@@ -148,10 +157,14 @@ export const appConfig: AppConfig = {
 	],
 	options: {
 		leader: ' ',
-		timeoutlen: 500, // ms to wait for next key in sequence
+		timeoutlen: 10000, // ms to wait for next key in sequence
+		whichkeyDelay: 100, // ms to wait before showing prefix hints
 		// Prevent autofocus from stealing keyboard input on page load.
 		noautofocus: true,
 		// 'native' uses the browser find UI when supported; 'custom' logs not implemented.
 		findmode: 'custom',
+		// Scroll amount as a fraction of the viewport height (e.g. 0.5 = half page).
+		scroll: 0.5,
 	},
+	plugins: {},
 };

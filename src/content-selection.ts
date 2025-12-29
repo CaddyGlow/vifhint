@@ -117,12 +117,26 @@ export class IncrementalSelection {
 
 	yank(): void {
 		const selection = window.getSelection();
-		if (!selection || selection.rangeCount === 0) return;
+		if (!selection || selection.rangeCount === 0) {
+			if (this.#caretMode) {
+				this.#exitCaretMode();
+			}
+			return;
+		}
 
 		const text = selection.toString();
-		if (!text) return;
+		if (!text) {
+			if (this.#caretMode) {
+				this.#exitCaretMode();
+			}
+			return;
+		}
 
-		void this.#copyText(text);
+		void this.#copyText(text).finally(() => {
+			if (this.#caretMode) {
+				this.#exitCaretMode();
+			}
+		});
 	}
 
 	moveWord(direction: 'forward' | 'backward', count = 1): void {
@@ -655,6 +669,25 @@ export class IncrementalSelection {
 		this.#scheduleCaretUpdate();
 	}
 
+	scrollAndFollow(deltaY: number): void {
+		if (deltaY === 0) return;
+
+		const selection = this.#ensureCaret();
+		let anchor: { x: number; y: number } | null = null;
+		if (selection && (this.#caretMode || (selection.rangeCount > 0 && selection.isCollapsed))) {
+			anchor = this.#getCaretViewportPoint(selection);
+		}
+
+		window.scrollBy({ top: deltaY, behavior: 'auto' });
+
+		if (!selection || !anchor) {
+			this.#scheduleCaretUpdate();
+			return;
+		}
+
+		this.#moveCaretToViewportPoint(selection, anchor.x, anchor.y);
+	}
+
 	#syncStack(currentRange: Range): void {
 		if (this.#rangeStack.length === 0) {
 			this.#rangeStack = [currentRange.cloneRange()];
@@ -1133,6 +1166,47 @@ export class IncrementalSelection {
 			currentRange = nextRange;
 			currentRect = this.#getCaretRect(currentRange) ?? currentRect;
 		}
+	}
+
+	#getCaretViewportPoint(selection: Selection): { x: number; y: number } | null {
+		if (selection.rangeCount === 0) return null;
+		const range =
+			selection.isCollapsed || !this.#caretMode
+				? selection.getRangeAt(0)
+				: this.#rangeFromSelectionFocus(selection);
+		if (!range) return null;
+		const rect = this.#getCaretRect(range);
+		if (!rect) return null;
+		const blockRect = this.#getBlockCaretRect(range, rect) ?? rect;
+		const x = this.#preferredCaretX ?? blockRect.left;
+		const y = blockRect.top + blockRect.height / 2;
+		return { x, y };
+	}
+
+	#moveCaretToViewportPoint(selection: Selection, x: number, y: number): void {
+		const targetRange = this.#rangeFromPoint(x, y);
+		if (!targetRange) return;
+
+		if (this.#caretMode) {
+			const anchorNode = selection.anchorNode;
+			if (!anchorNode) return;
+			this.#setSelectionWithDirection(
+				selection,
+				anchorNode,
+				selection.anchorOffset,
+				targetRange.startContainer,
+				targetRange.startOffset,
+			);
+		} else {
+			selection.removeAllRanges();
+			selection.addRange(targetRange);
+		}
+
+		this.#preferredCaretX = x;
+		if (this.#linewiseMode) {
+			this.#normalizeLinewiseSelection(selection);
+		}
+		this.#scheduleCaretUpdate();
 	}
 
 	#updateCaret(): void {

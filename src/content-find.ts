@@ -13,6 +13,11 @@ interface FindMatch {
 	readonly endOffset: number;
 }
 
+type FindControllerOptions = {
+	readonly onOpen?: () => void;
+	readonly onClose?: () => void;
+};
+
 class FindHighlighter {
 	#results: FindMatch[] = [];
 	#currentIndex = -1;
@@ -261,7 +266,16 @@ class FindHighlighter {
 }
 
 export class NativeFindController {
+	#onOpen?: () => void;
+	#onClose?: () => void;
+
+	constructor(options: FindControllerOptions = {}) {
+		this.#onOpen = options.onOpen;
+		this.#onClose = options.onClose;
+	}
+
 	open(): void {
+		this.#onOpen?.();
 		try {
 			if (document.queryCommandSupported?.('find')) {
 				document.execCommand('find');
@@ -273,7 +287,9 @@ export class NativeFindController {
 		}
 	}
 
-	close(): void {}
+	close(): void {
+		this.#onClose?.();
+	}
 
 	isActive(): boolean {
 		return false;
@@ -300,10 +316,18 @@ export class CustomFindController {
 	#lastActiveElement: HTMLElement | null = null;
 	#searchToken = 0;
 	#lastMatchIndex: number | null = null;
+	#onOpen?: () => void;
+	#onClose?: () => void;
+
+	constructor(options: FindControllerOptions = {}) {
+		this.#onOpen = options.onOpen;
+		this.#onClose = options.onClose;
+	}
 
 	open(): void {
 		this.#ensureBar();
 		this.#active = true;
+		this.#onOpen?.();
 		this.#lastActiveElement = document.activeElement as HTMLElement | null;
 
 		if (this.#bar && !this.#bar.isConnected) {
@@ -334,6 +358,7 @@ export class CustomFindController {
 	close(): void {
 		if (!this.#active) return;
 		this.#active = false;
+		this.#onClose?.();
 
 		this.#bar?.classList.remove('is-visible');
 		if (this.#input) {
