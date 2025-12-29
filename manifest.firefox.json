@@ -1,0 +1,38 @@
+{
+	"manifest_version": 2,
+	"name": "VifHint",
+	"version": "1.0.0",
+	"description": "Fast keyboard-driven link navigation with hint labels",
+	"icons": {
+		"16": "icons/icon16.png",
+		"32": "icons/icon32.png",
+		"48": "icons/icon48.png",
+		"128": "icons/icon128.png"
+	},
+	"permissions": ["activeTab", "tabs", "sessions"],
+	"background": {
+		"scripts": ["background.js"],
+		"persistent": false
+	},
+	"content_scripts": [
+		{
+			"matches": ["<all_urls>"],
+			"js": ["content.js"],
+			"css": ["hints.css"],
+			"run_at": "document_end"
+		}
+	],
+	"commands": {
+		"activate-hints": {
+			"suggested_key": {
+				"default": "Alt+F"
+			},
+			"description": "Activate link hints"
+		}
+	},
+	"browser_specific_settings": {
+		"gecko": {
+			"id": "vifhint@example.com"
+		}
+	}
+}

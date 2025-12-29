@@ -32,6 +32,8 @@ interface HintConfig {
 	readonly debugTimings: boolean;
 }
 
+type KeyBinding = (typeof appConfig.keyBindings.bindings)[number];
+
 // ============================================================================
 // Configuration
 // ============================================================================
@@ -65,6 +67,227 @@ const CLICKABLE_ROLES = new Set([
 	'menuitemcheckbox',
 	'menuitemradio',
 ]);
+
+// ============================================================================
+// Help Overlay
+// ============================================================================
+
+const HELP_GROUP_ORDER = [
+	'Help',
+	'Find',
+	'Tabs',
+	'Scroll',
+	'Hints',
+	'Focus',
+	'Selection',
+	'Other',
+] as const;
+
+function groupForBinding(binding: KeyBinding): string {
+	if (binding.operation.startsWith('tab:')) return 'Tabs';
+	if (binding.operation.startsWith('scroll:')) return 'Scroll';
+	if (binding.operation.startsWith('hints:')) return 'Hints';
+	if (binding.operation.startsWith('focus:')) return 'Focus';
+	if (binding.operation.startsWith('selection:')) return 'Selection';
+	if (binding.operation.startsWith('find:')) return 'Find';
+	if (binding.operation.startsWith('help:')) return 'Help';
+	return 'Other';
+}
+
+function createKeyCaps(keys: string): HTMLElement {
+	const container = document.createElement('span');
+	container.className = 'hint-help-keys';
+	for (const char of keys) {
+		const key = document.createElement('kbd');
+		key.textContent = char;
+		container.appendChild(key);
+	}
+	return container;
+}
+
+class HelpOverlay {
+	#overlay: HTMLDivElement;
+	#bindings: readonly KeyBinding[];
+
+	constructor(bindings: readonly KeyBinding[]) {
+		this.#bindings = bindings;
+		this.#overlay = this.#buildOverlay();
+	}
+
+	toggle(): void {
+		if (this.isVisible()) {
+			this.hide();
+		} else {
+			this.show();
+		}
+	}
+
+	show(): void {
+		this.#ensureAttached();
+		this.#overlay.classList.add('is-visible');
+	}
+
+	hide(): void {
+		this.#overlay.classList.remove('is-visible');
+	}
+
+	isVisible(): boolean {
+		return this.#overlay.classList.contains('is-visible');
+	}
+
+	#ensureAttached(): void {
+		if (this.#overlay.isConnected) return;
+		const host = document.body ?? document.documentElement;
+		host.appendChild(this.#overlay);
+	}
+
+	#buildOverlay(): HTMLDivElement {
+		const overlay = document.createElement('div');
+		overlay.className = 'hint-help-overlay';
+		overlay.setAttribute('role', 'dialog');
+		overlay.setAttribute('aria-modal', 'true');
+		overlay.setAttribute('aria-label', 'Key bindings');
+
+		const card = document.createElement('div');
+		card.className = 'hint-help-card';
+
+		const header = document.createElement('div');
+		header.className = 'hint-help-header';
+
+		const title = document.createElement('div');
+		title.className = 'hint-help-title';
+		title.textContent = 'Key bindings';
+
+		const subtitle = document.createElement('div');
+		subtitle.className = 'hint-help-subtitle';
+		subtitle.textContent = 'Press ? or Esc to close';
+
+		header.appendChild(title);
+		header.appendChild(subtitle);
+		card.appendChild(header);
+
+		const sectionsContainer = document.createElement('div');
+		sectionsContainer.className = 'hint-help-sections';
+
+		const grouped = new Map<string, KeyBinding[]>();
+		for (const binding of this.#bindings) {
+			const group = groupForBinding(binding);
+			const list = grouped.get(group);
+			if (list) {
+				list.push(binding);
+			} else {
+				grouped.set(group, [binding]);
+			}
+		}
+
+		for (const group of HELP_GROUP_ORDER) {
+			const bindings = grouped.get(group);
+			if (!bindings || bindings.length === 0) continue;
+
+			const section = document.createElement('section');
+			section.className = 'hint-help-section';
+
+			const heading = document.createElement('h2');
+			heading.className = 'hint-help-section-title';
+			heading.textContent = group;
+
+			const list = document.createElement('div');
+			list.className = 'hint-help-list';
+
+			for (const binding of bindings) {
+				const row = document.createElement('div');
+				row.className = 'hint-help-row';
+
+				const desc = document.createElement('div');
+				desc.className = 'hint-help-desc';
+				desc.textContent = binding.description;
+
+				row.appendChild(createKeyCaps(binding.keys));
+				row.appendChild(desc);
+				list.appendChild(row);
+			}
+
+			section.appendChild(heading);
+			section.appendChild(list);
+			sectionsContainer.appendChild(section);
+		}
+
+		card.appendChild(sectionsContainer);
+
+		if (this.#bindings.some((binding) => binding.repeatable)) {
+			const footer = document.createElement('div');
+			footer.className = 'hint-help-footer';
+			footer.textContent = 'Repeatable commands accept counts (e.g., 3d).';
+			card.appendChild(footer);
+		}
+
+		overlay.addEventListener('click', (event) => {
+			if (event.target === overlay) {
+				this.hide();
+			}
+		});
+
+		overlay.appendChild(card);
+		return overlay;
+	}
+}
+
+let bottomBar: HTMLDivElement | null = null;
+
+function getBottomBar(): HTMLDivElement {
+	if (!bottomBar) {
+		const bar = document.createElement('div');
+		bar.className = 'hint-bottom-bar';
+		const host = document.body ?? document.documentElement;
+		host.appendChild(bar);
+		bottomBar = bar;
+	}
+	return bottomBar;
+}
+
+class NativeFindController {
+	open(): void {
+		try {
+			if (document.queryCommandSupported?.('find')) {
+				document.execCommand('find');
+			} else {
+				console.warn('[hint] Native find is not supported on this page.');
+			}
+		} catch {
+			console.warn('[hint] Native find is not supported on this page.');
+		}
+	}
+
+	close(): void {}
+
+	isActive(): boolean {
+		return false;
+	}
+
+	next(): void {}
+
+	prev(): void {}
+}
+
+class CustomFindController {
+	open(): void {
+		console.info('[hint] Custom find mode is not implemented yet.');
+	}
+
+	close(): void {}
+
+	isActive(): boolean {
+		return false;
+	}
+
+	next(): void {
+		console.info('[hint] Custom find mode is not implemented yet.');
+	}
+
+	prev(): void {
+		console.info('[hint] Custom find mode is not implemented yet.');
+	}
+}
 
 // ============================================================================
 // Helper Functions
@@ -827,7 +1050,263 @@ class LinkHints {
 	}
 }
 
+// ============================================================================
+// Incremental Selection
+// ============================================================================
+
+class IncrementalSelection {
+	#rangeStack: Range[] = [];
+	#caretMode = false;
+	#indicator: HTMLDivElement | null = null;
+
+	constructor() {
+		document.addEventListener('keydown', (event) => {
+			if (event.key === 'Escape' && this.#caretMode) {
+				event.preventDefault();
+				event.stopPropagation();
+				event.stopImmediatePropagation();
+				this.#exitCaretMode();
+			}
+		});
+	}
+
+	toggle(): void {
+		if (this.#caretMode) {
+			this.#exitCaretMode();
+		} else {
+			this.#enterCaretMode();
+		}
+	}
+
+	expand(): void {
+		const selection = window.getSelection();
+		if (!selection || selection.rangeCount === 0) return;
+
+		const currentRange = selection.getRangeAt(0).cloneRange();
+		this.#syncStack(currentRange);
+
+		const container = this.#getContainingElement(currentRange);
+		if (!container) return;
+
+		const containerRange = this.#rangeForElement(container);
+		let nextRange: Range | null = null;
+
+		if (!this.#isSameRange(currentRange, containerRange)) {
+			nextRange = containerRange;
+		} else {
+			const parent = container.parentElement;
+			if (!parent) return;
+			nextRange = this.#rangeForElement(parent);
+		}
+
+		this.#applyRange(selection, nextRange);
+		this.#rangeStack.push(nextRange.cloneRange());
+		this.#caretMode = true;
+		this.#showIndicator('VISUAL');
+	}
+
+	shrink(): void {
+		const selection = window.getSelection();
+		if (!selection || selection.rangeCount === 0) return;
+
+		const currentRange = selection.getRangeAt(0).cloneRange();
+		if (this.#rangeStack.length === 0) {
+			this.#rangeStack = [currentRange];
+			return;
+		}
+
+		const lastRange = this.#rangeStack[this.#rangeStack.length - 1];
+		if (!this.#isSameRange(currentRange, lastRange)) {
+			this.#rangeStack = [currentRange];
+			return;
+		}
+
+		if (this.#rangeStack.length <= 1) return;
+
+		this.#rangeStack.pop();
+		const previousRange = this.#rangeStack[this.#rangeStack.length - 1];
+		this.#applyRange(selection, previousRange);
+		this.#caretMode = true;
+		this.#showIndicator('VISUAL');
+	}
+
+	yank(): void {
+		const selection = window.getSelection();
+		if (!selection || selection.rangeCount === 0) return;
+
+		const text = selection.toString();
+		if (!text) return;
+
+		void this.#copyText(text);
+	}
+
+	#syncStack(currentRange: Range): void {
+		if (this.#rangeStack.length === 0) {
+			this.#rangeStack = [currentRange.cloneRange()];
+			return;
+		}
+
+		const lastRange = this.#rangeStack[this.#rangeStack.length - 1];
+		if (!this.#isSameRange(currentRange, lastRange)) {
+			this.#rangeStack = [currentRange.cloneRange()];
+		}
+	}
+
+	#enterCaretMode(): void {
+		const selection = window.getSelection();
+		if (!selection) return;
+
+		let range: Range | null = null;
+		if (selection.rangeCount > 0) {
+			range = selection.getRangeAt(0).cloneRange();
+			range.collapse(true);
+		} else {
+			range = this.#findInitialRange();
+		}
+
+		if (!range) return;
+
+		selection.removeAllRanges();
+		selection.addRange(range);
+		this.#rangeStack = [range.cloneRange()];
+		this.#caretMode = true;
+		this.#showIndicator('VISUAL');
+	}
+
+	#exitCaretMode(): void {
+		const selection = window.getSelection();
+		selection?.removeAllRanges();
+		this.#rangeStack = [];
+		this.#caretMode = false;
+		this.#hideIndicator();
+	}
+
+	#findInitialRange(): Range | null {
+		const active = document.activeElement as HTMLElement | null;
+		if (active?.isContentEditable) {
+			const range = document.createRange();
+			range.selectNodeContents(active);
+			range.collapse(true);
+			return range;
+		}
+
+		return this.#findFirstVisibleTextRange();
+	}
+
+	#findFirstVisibleTextRange(): Range | null {
+		if (!document.body) return null;
+		const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+		for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+			const text = node.textContent?.trim();
+			if (!text) continue;
+			const textNode = node as Text;
+			if (!this.#isTextNodeVisible(textNode)) continue;
+			const range = document.createRange();
+			range.setStart(textNode, 0);
+			range.setEnd(textNode, 0);
+			return range;
+		}
+		return null;
+	}
+
+	#showIndicator(label: string): void {
+		if (!this.#indicator) {
+			const indicator = document.createElement('div');
+			indicator.className = 'visual-mode-indicator';
+			this.#indicator = indicator;
+		}
+
+		if (!this.#indicator.isConnected) {
+			getBottomBar().appendChild(this.#indicator);
+		}
+
+		this.#indicator.textContent = label;
+		this.#indicator.classList.add('is-visible');
+	}
+
+	#hideIndicator(): void {
+		if (!this.#indicator) return;
+		this.#indicator.classList.remove('is-visible');
+	}
+
+	#isTextNodeVisible(node: Text): boolean {
+		const parent = node.parentElement;
+		if (!parent) return false;
+		const style = getComputedStyle(parent);
+		if (style.display === 'none' || style.visibility === 'hidden') return false;
+		const range = document.createRange();
+		range.selectNodeContents(node);
+		const rect = range.getBoundingClientRect();
+		if (rect.width === 0 && rect.height === 0) return false;
+		if (rect.bottom <= 0 || rect.top >= window.innerHeight) return false;
+		if (rect.right <= 0 || rect.left >= window.innerWidth) return false;
+		return true;
+	}
+
+	#getContainingElement(range: Range): Element | null {
+		let node: Node | null = range.commonAncestorContainer;
+		if (node.nodeType === Node.TEXT_NODE) {
+			node = node.parentElement;
+		}
+		if (node && node.nodeType === Node.ELEMENT_NODE) {
+			return node as Element;
+		}
+		return null;
+	}
+
+	#rangeForElement(element: Element): Range {
+		const range = document.createRange();
+		range.selectNodeContents(element);
+		return range;
+	}
+
+	#applyRange(selection: Selection, range: Range): void {
+		selection.removeAllRanges();
+		selection.addRange(range);
+	}
+
+	#isSameRange(a: Range, b: Range): boolean {
+		return (
+			a.startContainer === b.startContainer &&
+			a.startOffset === b.startOffset &&
+			a.endContainer === b.endContainer &&
+			a.endOffset === b.endOffset
+		);
+	}
+
+	async #copyText(text: string): Promise<void> {
+		if (navigator.clipboard?.writeText) {
+			try {
+				await navigator.clipboard.writeText(text);
+				return;
+			} catch {
+				// Fall back to execCommand copy
+			}
+		}
+
+		try {
+			document.execCommand('copy');
+		} catch {
+			// Ignore copy failures
+		}
+	}
+}
+
 // Initialize
+function getActiveBindings(useNativeFind: boolean): readonly KeyBinding[] {
+	return appConfig.keyBindings.bindings.filter((binding) => {
+		if (useNativeFind && (binding.operation === 'find:next' || binding.operation === 'find:prev')) {
+			return false;
+		}
+		return true;
+	});
+}
+
 setupStealFocusOnLoad();
 const linkHints = new LinkHints();
-new KeyBindings(linkHints);
+const incrementalSelection = new IncrementalSelection();
+const useNativeFind = appConfig.settings.findMode === 'native';
+const searchController = useNativeFind ? new NativeFindController() : new CustomFindController();
+const activeBindings = getActiveBindings(useNativeFind);
+const helpOverlay = new HelpOverlay(activeBindings);
+new KeyBindings(linkHints, incrementalSelection, searchController, helpOverlay, activeBindings);

@@ -9,7 +9,15 @@ type KeyOperation =
 	| 'scroll:bottom'
 	| 'scroll:half-down'
 	| 'scroll:half-up'
-	| 'focus:input';
+	| 'focus:input'
+	| 'selection:expand'
+	| 'selection:shrink'
+	| 'selection:toggle'
+	| 'selection:yank'
+	| 'help:toggle'
+	| 'find:open'
+	| 'find:next'
+	| 'find:prev';
 
 type KeyBinding = {
 	readonly keys: string;
@@ -25,6 +33,7 @@ type KeyBindingConfig = {
 
 type Settings = {
 	readonly stealFocusOnLoad: boolean;
+	readonly findMode: 'custom' | 'native';
 };
 
 type AppConfig = {
@@ -81,10 +90,51 @@ export const appConfig = {
 
 			// Focus
 			{ keys: 'gi', operation: 'focus:input', description: 'Focus next input', repeatable: true },
+
+			// Selection
+			{
+				keys: 'v',
+				operation: 'selection:toggle',
+				description: 'Toggle caret mode',
+				repeatable: false,
+			},
+			{
+				keys: 's',
+				operation: 'selection:expand',
+				description: 'Expand selection to parent',
+				repeatable: true,
+			},
+			{
+				keys: 'S',
+				operation: 'selection:shrink',
+				description: 'Shrink selection to child',
+				repeatable: true,
+			},
+			{
+				keys: 'y',
+				operation: 'selection:yank',
+				description: 'Yank selection to clipboard',
+				repeatable: false,
+			},
+
+			// Find
+			{ keys: '/', operation: 'find:open', description: 'Find in page', repeatable: false },
+			{ keys: 'n', operation: 'find:next', description: 'Next match', repeatable: true },
+			{ keys: 'N', operation: 'find:prev', description: 'Previous match', repeatable: true },
+
+			// Help
+			{
+				keys: '?',
+				operation: 'help:toggle',
+				description: 'Show key bindings',
+				repeatable: false,
+			},
 		],
 	},
 	settings: {
 		// Prevent autofocus from stealing keyboard input on page load.
 		stealFocusOnLoad: true,
+		// 'native' uses the browser find UI when supported; 'custom' logs not implemented.
+		findMode: 'native',
 	},
 } as const satisfies AppConfig;

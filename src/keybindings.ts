@@ -119,20 +119,53 @@ interface LinkHintsInterface {
 	activate(mode?: HintMode): void;
 }
 
+// Interface for incremental selection integration
+interface SelectionController {
+	expand(): void;
+	shrink(): void;
+	toggle(): void;
+	yank(): void;
+}
+
+// Interface for in-page search
+interface SearchController {
+	open(): void;
+	next(count?: number): void;
+	prev(count?: number): void;
+	isActive(): boolean;
+	close(): void;
+}
+
+// Interface for key bindings overlay
+interface HelpOverlayController {
+	toggle(): void;
+	hide(): void;
+	isVisible(): boolean;
+}
+
 // Main key bindings class
 export class KeyBindings {
 	#handler: KeySequenceHandler;
 	#linkHints: LinkHintsInterface;
+	#selection: SelectionController;
+	#search: SearchController | null;
+	#helpOverlay: HelpOverlayController | null;
 	#lastInputIndex = -1;
 	#countBuffer = '';
 	#countTimeoutId: number | null = null;
 
-	constructor(linkHints: LinkHintsInterface) {
+	constructor(
+		linkHints: LinkHintsInterface,
+		selection: SelectionController,
+		search?: SearchController,
+		helpOverlay?: HelpOverlayController,
+		bindings: readonly KeyBinding[] = appConfig.keyBindings.bindings,
+	) {
 		this.#linkHints = linkHints;
-		this.#handler = new KeySequenceHandler(
-			appConfig.keyBindings.bindings,
-			appConfig.keyBindings.timeout,
-		);
+		this.#selection = selection;
+		this.#search = search ?? null;
+		this.#helpOverlay = helpOverlay ?? null;
+		this.#handler = new KeySequenceHandler(bindings, appConfig.keyBindings.timeout);
 		this.#setupKeyListener();
 	}
 
@@ -140,11 +173,35 @@ export class KeyBindings {
 		document.addEventListener(
 			'keydown',
 			(e) => {
+				const key = e.key === '/' && e.shiftKey ? '?' : e.key;
+
+				if (this.#helpOverlay?.isVisible()) {
+					if (key === 'Escape' || key === '?') {
+						this.#helpOverlay.hide();
+						e.preventDefault();
+						e.stopPropagation();
+						return;
+					}
+
+					e.preventDefault();
+					e.stopPropagation();
+					return;
+				}
+
+				if (this.#search?.isActive()) {
+					if (key === 'Escape') {
+						this.#search.close();
+						e.preventDefault();
+						e.stopPropagation();
+					}
+					return;
+				}
+
 				// Skip if LinkHints is active
 				if (this.#linkHints.isActive()) return;
 
 				// Escape should blur focused editable elements
-				if (e.key === 'Escape' && this.#isEditableActive()) {
+				if (key === 'Escape' && this.#isEditableActive()) {
 					const active = document.activeElement as HTMLElement | null;
 					if (active) {
 						// Delay blur so page handlers see Escape on the focused element first.
@@ -166,24 +223,24 @@ export class KeyBindings {
 				if (e.ctrlKey || e.altKey || e.metaKey) return;
 
 				// Skip special keys
-				if (e.key.length > 1 && e.key !== 'Escape') return;
+				if (key.length > 1 && key !== 'Escape') return;
 
 				// Escape clears buffer
-				if (e.key === 'Escape') {
+				if (key === 'Escape') {
 					this.#handler.reset();
 					this.#resetCount();
 					return;
 				}
 
 				// Handle numeric count prefixes (e.g., 3gi)
-				if (/^\d$/.test(e.key) && this.#handler.isIdle()) {
-					this.#appendCount(e.key);
+				if (/^\d$/.test(key) && this.#handler.isIdle()) {
+					this.#appendCount(key);
 					e.preventDefault();
 					e.stopPropagation();
 					return;
 				}
 
-				const result = this.#handler.handleKey(e.key);
+				const result = this.#handler.handleKey(key);
 
 				if (result.result === 'match' && result.binding) {
 					const hasCount = this.#countBuffer.length > 0;
@@ -229,6 +286,30 @@ export class KeyBindings {
 			window.scrollBy({ top: (-window.innerHeight / 2) * steps, behavior: 'smooth' });
 		} else if (operation === 'focus:input') {
 			this.#focusNextInput(count, hasCount);
+		} else if (operation === 'selection:expand') {
+			const steps = Math.max(1, count);
+			for (let i = 0; i < steps; i += 1) {
+				this.#selection.expand();
+			}
+		} else if (operation === 'selection:shrink') {
+			const steps = Math.max(1, count);
+			for (let i = 0; i < steps; i += 1) {
+				this.#selection.shrink();
+			}
+		} else if (operation === 'selection:yank') {
+			this.#selection.yank();
+		} else if (operation === 'selection:toggle') {
+			this.#selection.toggle();
+		} else if (operation === 'find:open') {
+			this.#search?.open();
+		} else if (operation === 'find:next') {
+			const steps = Math.max(1, count);
+			this.#search?.next(steps);
+		} else if (operation === 'find:prev') {
+			const steps = Math.max(1, count);
+			this.#search?.prev(steps);
+		} else if (operation === 'help:toggle') {
+			this.#helpOverlay?.toggle();
 		}
 	}
 
