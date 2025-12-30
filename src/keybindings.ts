@@ -154,7 +154,7 @@ interface LinkHintsInterface {
 	activate(mode?: HintMode): void;
 }
 
-// Interface for incremental selection integration
+// Interface for selection controller integration
 interface SelectionController {
 	expand(): void;
 	shrink(): void;

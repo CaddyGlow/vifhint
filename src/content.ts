@@ -3,7 +3,6 @@ import { setupNoAutofocus } from './content-dom';
 import { CustomFindController, NativeFindController } from './content-find';
 import { HelpOverlay } from './content-help-overlay';
 import { LinkHints } from './content-link-hints';
-import { IncrementalSelection } from './content-selection';
 import { KeyBindings } from './keybindings';
 import { PluginHost } from './plugins/host';
 import { pluginRegistry } from './plugins/registry';
@@ -11,6 +10,7 @@ import type { KeymapContribution, UiApi } from './plugins/types';
 import { type SiteDisableState, getGlobalEnabled, getSiteDisableState } from './site-disable';
 import type { HintMode } from './types';
 import { type ResolvedConfig, loadConfig, watchConfigChanges } from './user-config';
+import { VisualModeController } from './visual-mode-controller';
 
 type CommandExecutor = {
 	isRegistered(command: string): boolean;
@@ -86,7 +86,7 @@ function createRuntime(config: ResolvedConfig): Runtime {
 		isEnabled,
 		config: config.hints,
 	});
-	const incrementalSelection = new IncrementalSelection(config.options.caret);
+	const selectionController = new VisualModeController(config.options.caret);
 	const useNativeFind = config.options.findmode === 'native';
 	const searchController = useNativeFind
 		? new NativeFindController({
@@ -107,7 +107,7 @@ function createRuntime(config: ResolvedConfig): Runtime {
 			isActive: () => linkHints.isActive(),
 			activate: (mode?: HintMode) => linkHints.activate(mode),
 		},
-		selection: incrementalSelection,
+		selection: selectionController,
 		search: searchController,
 	});
 
@@ -123,7 +123,7 @@ function createRuntime(config: ResolvedConfig): Runtime {
 
 	const keyBindings = new KeyBindings(
 		linkHints,
-		incrementalSelection,
+		selectionController,
 		searchController,
 		helpOverlay,
 		activeBindings,
@@ -157,7 +157,7 @@ function createRuntime(config: ResolvedConfig): Runtime {
 		helpOverlay.hide();
 		keyBindings.dispose();
 		linkHints.dispose();
-		incrementalSelection.dispose();
+		selectionController.dispose();
 		helpOverlay.dispose();
 		searchController.dispose();
 		pluginHost?.dispose();
