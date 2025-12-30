@@ -65,18 +65,18 @@ function createUi(): UiApi {
 	};
 }
 
-document.documentElement.dataset.hintColorsheme = appConfig.options.colorsheme;
+type Runtime = {
+	applyDisableState(state: SiteDisableState): void;
+};
 
-void (async () => {
-	const host = window.location.hostname;
-	const initialState = await getSiteDisableState(host);
+function createRuntime(initialState: SiteDisableState): Runtime {
 	let extensionEnabled = initialState === 'enabled';
 
-	if (initialState === 'enabled') {
-		setupNoAutofocus();
-	}
-
 	const isEnabled = (): boolean => extensionEnabled;
+
+	setupNoAutofocus();
+	document.documentElement.dataset.hintColorsheme = appConfig.options.colorsheme;
+
 	const ui = createUi();
 	let pluginHost: PluginHost | null = null;
 	const linkHints = new LinkHints({
@@ -153,6 +153,32 @@ void (async () => {
 
 	applyDisableState(initialState);
 
+	void pluginHost.activateStartup({ url: window.location.href, host: window.location.host });
+	pluginHost.emit('page:ready', undefined);
+
+	return { applyDisableState };
+}
+
+void (async () => {
+	const host = window.location.hostname;
+	let runtime: Runtime | null = null;
+
+	const ensureRuntime = (state: SiteDisableState): Runtime => {
+		if (!runtime) runtime = createRuntime(state);
+		return runtime;
+	};
+
+	const applyDisableState = (state: SiteDisableState): void => {
+		if (state === 'enabled') {
+			ensureRuntime(state).applyDisableState(state);
+		} else if (runtime) {
+			runtime.applyDisableState(state);
+		}
+	};
+
+	const initialState = await getSiteDisableState(host);
+	applyDisableState(initialState);
+
 	chrome.runtime.onMessage.addListener((message) => {
 		if (!message || message.type !== 'hint:site-state') return;
 		if (typeof message.host === 'string' && message.host !== host) return;
@@ -164,7 +190,4 @@ void (async () => {
 			applyDisableState(message.state);
 		}
 	});
-
-	void pluginHost.activateStartup({ url: window.location.href, host: window.location.host });
-	pluginHost.emit('page:ready', undefined);
 })();
