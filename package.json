@@ -4,10 +4,10 @@
 	"description": "Minimal link hints Chrome extension",
 	"scripts": {
 		"build": "bun run build:debug",
-		"build:debug": "bun build src/content.ts src/background.ts src/popup.ts --outdir=dist --target=browser --sourcemap=external && cp ./manifest.json ./style.css ./popup.html ./popup.css ./dist/ && cp -r ./icons ./dist/",
-		"build:release": "bun build src/content.ts src/background.ts src/popup.ts --outdir=dist --target=browser --minify --sourcemap=external --define:process.env.NODE_ENV='\"production\"' && cp ./manifest.json ./style.css ./popup.html ./popup.css ./dist/ && cp -r ./icons ./dist/",
+		"build:debug": "rm -rf dist && mkdir -p dist && bun build src/content.ts src/background.ts src/popup.ts --outdir=dist --target=browser --sourcemap=external && cp ./manifest.json ./style.css ./popup.html ./popup.css ./dist/ && cp -r ./icons ./dist/",
+		"build:release": "rm -rf dist && mkdir -p dist && bun build src/content.ts src/background.ts src/popup.ts --outdir=dist --target=browser --production --sourcemap=external && cp ./manifest.json ./style.css ./popup.html ./popup.css ./dist/ && cp -r ./icons ./dist/",
 		"build:firefox": "rm -rf dist-firefox && mkdir -p dist-firefox && bun build src/content.ts src/background.ts src/popup.ts --outdir=dist-firefox --target=browser --sourcemap=external && cp ./style.css ./popup.html ./popup.css dist-firefox/ && cp ./manifest.firefox.json dist-firefox/manifest.json && cp -r ./icons ./dist-firefox/",
-		"build:firefox:release": "rm -rf dist-firefox && mkdir -p dist-firefox && bun build src/content.ts src/background.ts src/popup.ts --outdir=dist-firefox --target=browser --minify --sourcemap=external --define:process.env.NODE_ENV='\"production\"' && cp ./style.css ./popup.html ./popup.css dist-firefox/ && cp ./manifest.firefox.json dist-firefox/manifest.json && cp -r ./icons ./dist-firefox/",
+		"build:firefox:release": "rm -rf dist-firefox && mkdir -p dist-firefox && bun build src/content.ts src/background.ts src/popup.ts --outdir=dist-firefox --target=browser --production --sourcemap=external && cp ./style.css ./popup.html ./popup.css dist-firefox/ && cp ./manifest.firefox.json dist-firefox/manifest.json && cp -r ./icons ./dist-firefox/",
 		"release": "bun run build:release && (cd dist && rm -f *.map && zip -r ../vifhint-$(bun -e 'console.log(require(\"./manifest.json\").version)')-$(git rev-parse --short HEAD).zip .)",
 		"release:firefox": "bun run build:firefox:release && (cd dist-firefox && rm -f *.map && zip -r ../vifhint-firefox-$(bun -e 'console.log(require(\"./manifest.json\").version)')-$(git rev-parse --short HEAD).zip .)",
 		"icons:generate": "bash scripts/generate-icons.sh",
