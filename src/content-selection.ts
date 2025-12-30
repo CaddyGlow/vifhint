@@ -1,5 +1,7 @@
-import { appConfig } from './config';
+import type { AppConfig } from './config';
 import { getBottomBar, isEditable } from './content-dom';
+
+type CaretOptions = AppConfig['options']['caret'];
 
 export class IncrementalSelection {
 	#rangeStack: Range[] = [];
@@ -12,8 +14,10 @@ export class IncrementalSelection {
 	#onKeyDown?: (event: KeyboardEvent) => void;
 	#onDomContentLoaded?: () => void;
 	#initTimerId: number | null = null;
+	#caretOptions: CaretOptions;
 
-	constructor() {
+	constructor(caretOptions: CaretOptions) {
+		this.#caretOptions = caretOptions;
 		this.#onKeyDown = (event) => {
 			if (event.key === 'Escape' && this.#caretMode) {
 				event.preventDefault();
@@ -1413,10 +1417,10 @@ export class IncrementalSelection {
 		if (!this.#caret) {
 			const caret = document.createElement('div');
 			caret.className = 'hint-caret';
-			if (appConfig.options.caret.shape === 'block') {
+			if (this.#caretOptions.shape === 'block') {
 				caret.classList.add('is-block');
 			}
-			if (appConfig.options.caret.blink === 'blink') {
+			if (this.#caretOptions.blink === 'blink') {
 				caret.classList.add('is-blink');
 			}
 			caret.setAttribute('aria-hidden', 'true');

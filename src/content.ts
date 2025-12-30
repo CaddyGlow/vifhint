@@ -1,4 +1,4 @@
-import { type Keymap, appConfig } from './config';
+import type { Keymap } from './config';
 import { setupNoAutofocus } from './content-dom';
 import { CustomFindController, NativeFindController } from './content-find';
 import { HelpOverlay } from './content-help-overlay';
@@ -10,6 +10,7 @@ import { pluginRegistry } from './plugins/registry';
 import type { KeymapContribution, UiApi } from './plugins/types';
 import { type SiteDisableState, getGlobalEnabled, getSiteDisableState } from './site-disable';
 import type { HintMode } from './types';
+import { type ResolvedConfig, loadConfig, watchConfigChanges } from './user-config';
 
 type CommandExecutor = {
 	isRegistered(command: string): boolean;
@@ -69,13 +70,13 @@ type Runtime = {
 	dispose(): void;
 };
 
-function createRuntime(): Runtime {
+function createRuntime(config: ResolvedConfig): Runtime {
 	let extensionEnabled = true;
 
 	const isEnabled = (): boolean => extensionEnabled;
 
-	setupNoAutofocus();
-	document.documentElement.dataset.hintColorsheme = appConfig.options.colorsheme;
+	setupNoAutofocus(config.options.noautofocus);
+	document.documentElement.dataset.hintColorsheme = config.options.colorsheme;
 
 	const ui = createUi();
 	let pluginHost: PluginHost | null = null;
@@ -83,9 +84,10 @@ function createRuntime(): Runtime {
 		onActivate: (mode: HintMode) => pluginHost?.emit('hint:activate', { mode }),
 		onDeactivate: () => pluginHost?.emit('hint:deactivate', undefined),
 		isEnabled,
+		config: config.hints,
 	});
-	const incrementalSelection = new IncrementalSelection();
-	const useNativeFind = appConfig.options.findmode === 'native';
+	const incrementalSelection = new IncrementalSelection(config.options.caret);
+	const useNativeFind = config.options.findmode === 'native';
 	const searchController = useNativeFind
 		? new NativeFindController({
 				onOpen: () => pluginHost?.emit('search:open', undefined),
@@ -100,6 +102,7 @@ function createRuntime(): Runtime {
 		context: 'content',
 		registry: pluginRegistry,
 		ui,
+		config,
 		hints: {
 			isActive: () => linkHints.isActive(),
 			activate: (mode?: HintMode) => linkHints.activate(mode),
@@ -109,8 +112,8 @@ function createRuntime(): Runtime {
 	});
 
 	const pluginKeymaps = pluginHost.getKeymaps().map(normalizeKeymapContribution);
-	const activeBindings = getActiveBindings(useNativeFind, [...appConfig.keymaps, ...pluginKeymaps]);
-	const helpOverlay = new HelpOverlay(activeBindings);
+	const activeBindings = getActiveBindings(useNativeFind, [...config.keymaps, ...pluginKeymaps]);
+	const helpOverlay = new HelpOverlay(activeBindings, config.options.leader);
 
 	const commandExecutor: CommandExecutor = {
 		isRegistered: (command) => pluginHost?.hasCommand(command) ?? false,
@@ -125,6 +128,9 @@ function createRuntime(): Runtime {
 		helpOverlay,
 		activeBindings,
 		{
+			leader: config.options.leader,
+			timeoutlen: config.options.timeoutlen,
+			scroll: config.options.scroll,
 			commandExecutor,
 			onKeySequence: (event) => pluginHost?.emit('key:sequence', event),
 			isEnabled,
@@ -166,9 +172,10 @@ void (async () => {
 	let runtime: Runtime | null = null;
 	let globalEnabled = true;
 	let siteState: SiteDisableState = 'enabled';
+	let currentConfig = await loadConfig();
 
 	const ensureRuntime = (): Runtime => {
-		if (!runtime) runtime = createRuntime();
+		if (!runtime) runtime = createRuntime(currentConfig);
 		return runtime;
 	};
 
@@ -181,6 +188,15 @@ void (async () => {
 			runtime = null;
 		}
 	};
+
+	watchConfigChanges((nextConfig) => {
+		currentConfig = nextConfig;
+		if (runtime) {
+			runtime.dispose();
+			runtime = null;
+		}
+		updateRuntime();
+	});
 
 	const [initialGlobal, initialSite] = await Promise.all([
 		getGlobalEnabled(),

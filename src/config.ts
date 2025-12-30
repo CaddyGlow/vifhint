@@ -113,7 +113,7 @@ export const appConfig: AppConfig = {
 			repeatable: false,
 		},
 		{
-			lhs: '<leader>/',
+			lhs: '<leader> ',
 			rhs: 'hints:search',
 			desc: 'Search hint targets by text',
 			repeatable: false,

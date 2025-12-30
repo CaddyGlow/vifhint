@@ -16,6 +16,15 @@ type KeySequenceListener = (event: KeySequenceEvent) => void;
 
 type EnabledCheck = () => boolean;
 
+type KeyBindingsOptions = {
+	readonly leader?: string;
+	readonly timeoutlen?: number;
+	readonly scroll?: number;
+	readonly commandExecutor?: CommandExecutor;
+	readonly onKeySequence?: KeySequenceListener;
+	readonly isEnabled?: EnabledCheck;
+};
+
 // Trie node for efficient prefix matching
 interface TrieNode {
 	children: Map<string, TrieNode>;
@@ -198,6 +207,9 @@ export class KeyBindings {
 	#countTimeoutId: number | null = null;
 	#isEnabled: EnabledCheck | null = null;
 	#onKeyDown?: (event: KeyboardEvent) => void;
+	#leader: string;
+	#timeoutlen: number;
+	#scrollStep: number;
 
 	constructor(
 		linkHints: LinkHintsInterface,
@@ -205,29 +217,28 @@ export class KeyBindings {
 		search?: SearchController,
 		helpOverlay?: HelpOverlayController,
 		keymaps: readonly Keymap[] = appConfig.keymaps,
-		options?: {
-			commandExecutor?: CommandExecutor;
-			onKeySequence?: KeySequenceListener;
-			isEnabled?: EnabledCheck;
-		},
+		options: KeyBindingsOptions = {},
 	) {
 		this.#linkHints = linkHints;
 		this.#selection = selection;
 		this.#search = search ?? null;
 		this.#helpOverlay = helpOverlay ?? null;
-		this.#commandExecutor = options?.commandExecutor ?? null;
-		this.#onKeySequence = options?.onKeySequence ?? null;
-		this.#isEnabled = options?.isEnabled ?? null;
+		this.#commandExecutor = options.commandExecutor ?? null;
+		this.#onKeySequence = options.onKeySequence ?? null;
+		this.#isEnabled = options.isEnabled ?? null;
+		this.#leader = options.leader ?? appConfig.options.leader;
+		this.#timeoutlen = options.timeoutlen ?? appConfig.options.timeoutlen;
+		this.#scrollStep = options.scroll ?? appConfig.options.scroll;
 		this.#keymaps = [...keymaps];
-		const normalized = normalizeKeymaps(this.#keymaps, appConfig.options.leader);
-		this.#handler = new KeySequenceHandler(normalized, appConfig.options.timeoutlen);
+		const normalized = normalizeKeymaps(this.#keymaps, this.#leader);
+		this.#handler = new KeySequenceHandler(normalized, this.#timeoutlen);
 		this.#setupKeyListener();
 	}
 
 	registerKeymap(map: Keymap): void {
 		this.#keymaps.push(map);
-		const normalized = normalizeKeymaps(this.#keymaps, appConfig.options.leader);
-		this.#handler = new KeySequenceHandler(normalized, appConfig.options.timeoutlen);
+		const normalized = normalizeKeymaps(this.#keymaps, this.#leader);
+		this.#handler = new KeySequenceHandler(normalized, this.#timeoutlen);
 	}
 
 	getBindings(): readonly Keymap[] {
@@ -380,11 +391,11 @@ export class KeyBindings {
 			this.#scrollToCenter();
 		} else if (operation === 'scroll:half-down') {
 			const steps = Math.max(1, count);
-			const baseStep = Math.max(0, appConfig.options.scroll);
+			const baseStep = Math.max(0, this.#scrollStep);
 			this.#selection.scrollAndFollow(window.innerHeight * baseStep * steps);
 		} else if (operation === 'scroll:half-up') {
 			const steps = Math.max(1, count);
-			const baseStep = Math.max(0, appConfig.options.scroll);
+			const baseStep = Math.max(0, this.#scrollStep);
 			this.#selection.scrollAndFollow(-window.innerHeight * baseStep * steps);
 		} else if (operation === 'focus:input') {
 			this.#focusNextInput(count, hasCount);
@@ -570,7 +581,7 @@ export class KeyBindings {
 		this.#countTimeoutId = window.setTimeout(() => {
 			this.#countBuffer = '';
 			this.#countTimeoutId = null;
-		}, appConfig.options.timeoutlen);
+		}, this.#timeoutlen);
 	}
 
 	#getTextInputs(): HTMLElement[] {

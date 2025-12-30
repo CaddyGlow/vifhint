@@ -1,4 +1,4 @@
-import { appConfig } from '../config';
+import { type AppConfig, appConfig } from '../config';
 import type { HintMode } from '../types';
 import type {
 	CommandArgs,
@@ -46,6 +46,7 @@ export type PluginHostOptions = {
 	context: CoreContext;
 	registry: readonly PluginDefinition[];
 	ui: UiApi;
+	config?: AppConfig;
 	registerKeymap?: (map: KeymapContribution) => void;
 	hints?: HintsApi;
 	selection?: SelectionApi;
@@ -76,6 +77,7 @@ export class PluginHost {
 	#search?: SearchApi;
 	#log: (message: string, data?: unknown) => void;
 	#runtimeOptions = new Map<string, Map<string, unknown>>();
+	#config: AppConfig;
 
 	constructor(options: PluginHostOptions) {
 		this.#context = options.context;
@@ -85,6 +87,7 @@ export class PluginHost {
 		this.#selection = options.selection;
 		this.#search = options.search;
 		this.#log = options.log ?? ((message, data) => console.debug(message, data));
+		this.#config = options.config ?? appConfig;
 		this.#initRegistry(options.registry);
 	}
 
@@ -239,7 +242,7 @@ export class PluginHost {
 			const manifest = definition.manifest;
 			if (!manifest.contexts.includes(this.#context)) continue;
 
-			const configEntry = appConfig.plugins?.[manifest.id];
+			const configEntry = this.#config.plugins?.[manifest.id];
 			const enabled = configEntry?.enabled !== false;
 			const load = definition.load[this.#context];
 
@@ -443,7 +446,7 @@ export class PluginHost {
 		if (overrides?.has(key)) {
 			return overrides.get(key) as T;
 		}
-		const configEntry = appConfig.plugins?.[pluginId];
+		const configEntry = this.#config.plugins?.[pluginId];
 		const optionValue = configEntry?.config?.[key] ?? configEntry?.options?.[key];
 		if (optionValue !== undefined) {
 			return optionValue as T;
@@ -460,15 +463,15 @@ export class PluginHost {
 		overrides.set(key, value);
 	}
 
-	#getConfig(pluginId: string): typeof appConfig {
-		const configEntry = appConfig.plugins?.[pluginId];
+	#getConfig(pluginId: string): AppConfig {
+		const configEntry = this.#config.plugins?.[pluginId];
 		const overrides = this.#runtimeOptions.get(pluginId);
-		if (!configEntry && !overrides) return appConfig;
+		if (!configEntry && !overrides) return this.#config;
 
 		const mergedPluginConfig = this.#getPluginConfig(pluginId);
 
 		const plugins = {
-			...(appConfig.plugins ?? {}),
+			...(this.#config.plugins ?? {}),
 			[pluginId]: {
 				...configEntry,
 				config: mergedPluginConfig,
@@ -476,13 +479,13 @@ export class PluginHost {
 		};
 
 		return {
-			...appConfig,
+			...this.#config,
 			plugins,
 		};
 	}
 
 	#getPluginConfig(pluginId: string): Record<string, unknown> {
-		const configEntry = appConfig.plugins?.[pluginId];
+		const configEntry = this.#config.plugins?.[pluginId];
 		const basePluginConfig = (configEntry?.config ?? configEntry?.options ?? {}) as Record<
 			string,
 			unknown

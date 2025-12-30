@@ -1,4 +1,4 @@
-import { type Keymap, appConfig } from './config';
+import type { Keymap } from './config';
 import { formatKeySequenceForDisplay } from './key-notation';
 
 type HelpGroup =
@@ -41,10 +41,10 @@ function groupForBinding(binding: Keymap): HelpGroup {
 	return 'Other';
 }
 
-function createKeyCaps(lhs: string): HTMLElement {
+function createKeyCaps(lhs: string, leader: string): HTMLElement {
 	const container = document.createElement('span');
 	container.className = 'hint-help-keys';
-	const tokens = formatKeySequenceForDisplay(lhs, appConfig.options.leader);
+	const tokens = formatKeySequenceForDisplay(lhs, leader);
 	for (const token of tokens) {
 		const key = document.createElement('kbd');
 		key.textContent = token;
@@ -56,9 +56,11 @@ function createKeyCaps(lhs: string): HTMLElement {
 export class HelpOverlay {
 	#overlay: HTMLDivElement;
 	#bindings: Keymap[];
+	#leader: string;
 
-	constructor(bindings: readonly Keymap[]) {
+	constructor(bindings: readonly Keymap[], leader: string) {
 		this.#bindings = [...bindings];
+		this.#leader = leader;
 		this.#overlay = this.#buildOverlay();
 	}
 
@@ -166,7 +168,7 @@ export class HelpOverlay {
 				desc.className = 'hint-help-desc';
 				desc.textContent = binding.desc;
 
-				row.appendChild(createKeyCaps(binding.lhs));
+				row.appendChild(createKeyCaps(binding.lhs, this.#leader));
 				row.appendChild(desc);
 				list.appendChild(row);
 			}

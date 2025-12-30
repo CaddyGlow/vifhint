@@ -1,5 +1,3 @@
-import { appConfig } from './config';
-
 let bottomBar: HTMLDivElement | null = null;
 
 export function getBottomBar(): HTMLDivElement {
@@ -29,8 +27,8 @@ function shouldBlockAutofocusFrom(el: HTMLElement): boolean {
 	return isEditable(el);
 }
 
-export function setupNoAutofocus(): void {
-	if (!appConfig.options.noautofocus) return;
+export function setupNoAutofocus(enabled: boolean): void {
+	if (!enabled) return;
 
 	const blurActive = (): void => {
 		const active = document.activeElement as HTMLElement | null;

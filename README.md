@@ -79,6 +79,40 @@ Edit `src/config.ts` to tweak defaults:
 | `options.findmode` | `'custom'` | `native` uses the browser find UI when supported. |
 | `options.scroll` | `0.5` | Scroll amount for `d`/`u` as a fraction of the viewport height. |
 
+### Build-time Overrides (No Repo Edits)
+
+Provide a JSON config at build time and it will be bundled as `user-config.json` in `dist/`:
+
+```bash
+VIFHINT_USER_CONFIG_PATH=/path/to/vifhint.json bun run build
+```
+
+Or inline JSON:
+
+```bash
+VIFHINT_USER_CONFIG_JSON='{"options":{"leader":","}}' bun run build
+```
+
+The user config merges on top of defaults. For keymaps, set `keymapMode` to `replace` to
+fully override defaults (otherwise it merges by `lhs`).
+
+### Runtime Overrides
+
+Set `chrome.storage.local` key `hint.userConfig` to override at runtime. Changes are
+watched and applied automatically (content scripts restart with the new config).
+
+Example shape:
+
+```json
+{
+	"keymapMode": "merge",
+	"keymaps": [{ "lhs": "ff", "rhs": "hints:activate", "desc": "Hints", "repeatable": false }],
+	"options": { "leader": " ", "timeoutlen": 5000 },
+	"hints": { "hintChars": "asdfghjkl" },
+	"plugins": { "hint.whichKey": { "enabled": true, "config": { "delay": 150 } } }
+}
+```
+
 ### Change Hint Styling
 
 Edit `style.css` to customize the appearance of hint labels.

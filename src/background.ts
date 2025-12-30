@@ -4,6 +4,7 @@ import { PluginHost } from './plugins/host';
 import { pluginRegistry } from './plugins/registry';
 import type { UiApi } from './plugins/types';
 import { clearTemporaryFallbackHosts, getGlobalEnabled, getSiteDisableState } from './site-disable';
+import { loadConfig, watchConfigChanges } from './user-config';
 
 const ui: UiApi = {
 	toast: (message) => {
@@ -11,11 +12,15 @@ const ui: UiApi = {
 	},
 };
 
-const pluginHost = new PluginHost({
-	context: 'background',
-	registry: pluginRegistry,
-	ui,
-});
+let pluginHost: PluginHost | null = null;
+
+const createPluginHost = (config: Awaited<ReturnType<typeof loadConfig>>): PluginHost =>
+	new PluginHost({
+		context: 'background',
+		registry: pluginRegistry,
+		ui,
+		config,
+	});
 
 const actionApi = chrome.action ?? chrome.browserAction;
 const ICON_SIZES = [16, 32, 48, 128] as const;
@@ -38,8 +43,25 @@ chrome.runtime.onInstalled.addListener(() => {
 
 void updateAllTabIcons();
 
-void pluginHost.activateStartup();
-pluginHost.emit('page:ready', undefined);
+const initPluginHost = async (): Promise<void> => {
+	const config = await loadConfig();
+	if (pluginHost) {
+		pluginHost.dispose();
+	}
+	pluginHost = createPluginHost(config);
+	await pluginHost.activateStartup();
+	pluginHost.emit('page:ready', undefined);
+};
+
+void initPluginHost();
+watchConfigChanges((config) => {
+	if (pluginHost) {
+		pluginHost.dispose();
+	}
+	pluginHost = createPluginHost(config);
+	void pluginHost.activateStartup();
+	pluginHost.emit('page:ready', undefined);
+});
 
 // Handle Chrome keyboard shortcuts
 chrome.commands.onCommand.addListener((command) => {

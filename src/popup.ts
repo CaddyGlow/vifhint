@@ -1,4 +1,3 @@
-import { appConfig } from './config';
 import {
 	type SiteDisableState,
 	getGlobalEnabled,
@@ -7,6 +6,7 @@ import {
 	setGlobalEnabled,
 	setSiteDisableState,
 } from './site-disable';
+import { loadConfig, watchConfigChanges } from './user-config';
 
 const siteEl = document.querySelector<HTMLElement>('[data-site]');
 const statusEl = document.querySelector<HTMLElement>('[data-status]');
@@ -129,7 +129,15 @@ async function broadcastGlobalState(enabled: boolean): Promise<void> {
 }
 
 async function init(): Promise<void> {
-	document.documentElement.dataset.hintColorsheme = appConfig.options.colorsheme;
+	const applyColorsheme = async (): Promise<void> => {
+		const config = await loadConfig();
+		document.documentElement.dataset.hintColorsheme = config.options.colorsheme;
+	};
+
+	await applyColorsheme();
+	watchConfigChanges((config) => {
+		document.documentElement.dataset.hintColorsheme = config.options.colorsheme;
+	});
 
 	if (isTemporaryFallbackStorage()) {
 		setNote('Temporary disables reset when the browser restarts.');

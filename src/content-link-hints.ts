@@ -1,4 +1,5 @@
 import { isEditable } from './content-dom';
+import { type HintConfig, defaultHintConfig } from './hint-config';
 import type { HintMode } from './types';
 
 interface ElementData {
@@ -18,30 +19,11 @@ interface HintElement {
 	readonly isEditable: boolean;
 }
 
-type HintAlign = 'left' | 'center' | 'right';
-
 type LinkHintsOptions = {
+	readonly config?: HintConfig;
 	readonly onActivate?: (mode: HintMode) => void;
 	readonly onDeactivate?: () => void;
 	readonly isEnabled?: () => boolean;
-};
-
-interface HintConfig {
-	readonly hintChars: string;
-	readonly hintAlign: HintAlign;
-	readonly hintOffset: { readonly x: number; readonly y: number };
-	readonly clickableSelector: string;
-	readonly showElementBorder: boolean;
-	readonly debugTimings: boolean;
-}
-
-const config: HintConfig = {
-	hintChars: 'asdfghjkl',
-	hintAlign: 'left',
-	hintOffset: { x: -8, y: -10 },
-	clickableSelector: '',
-	showElementBorder: true,
-	debugTimings: true,
 };
 
 const CLICKABLE_TAGS = new Set(['A', 'BUTTON', 'SELECT', 'INPUT', 'TEXTAREA', 'SUMMARY']);
@@ -383,6 +365,7 @@ export class LinkHints {
 	#onActivate?: (mode: HintMode) => void;
 	#onDeactivate?: () => void;
 	#isEnabled: () => boolean;
+	#config: HintConfig;
 	#onKeyDown?: (event: KeyboardEvent) => void;
 	#onRuntimeMessage?: (message: unknown) => void;
 
@@ -390,6 +373,7 @@ export class LinkHints {
 		this.#onActivate = options.onActivate;
 		this.#onDeactivate = options.onDeactivate;
 		this.#isEnabled = options.isEnabled ?? (() => true);
+		this.#config = options.config ?? defaultHintConfig;
 		this.#setupKeyListener();
 		this.#setupCommandListener();
 	}
@@ -467,7 +451,7 @@ export class LinkHints {
 			}
 
 			const lowered = key.toLowerCase();
-			if (config.hintChars.includes(lowered)) {
+			if (this.#config.hintChars.includes(lowered)) {
 				this.#currentInput += lowered;
 				this.#updateInputDisplay();
 				this.#filterHints();
@@ -553,7 +537,7 @@ export class LinkHints {
 
 		const timings: Record<string, number> = {};
 		const mark = (label: string): void => {
-			if (config.debugTimings) timings[label] = performance.now();
+			if (this.#config.debugTimings) timings[label] = performance.now();
 		};
 		const fmt = (value: number): string => value.toFixed(1);
 
@@ -587,7 +571,7 @@ export class LinkHints {
 		this.#hintLength = hintStrings[0]?.length ?? 0;
 		mark('created');
 
-		if (config.showElementBorder && !isSearchMode) {
+		if (this.#config.showElementBorder && !isSearchMode) {
 			for (const hint of this.#hints) {
 				if (hint.isEditable) {
 					hint.element.classList.add('link-hint-target-input');
@@ -605,7 +589,7 @@ export class LinkHints {
 			this.#filterHints();
 		}
 
-		if (config.debugTimings) {
+		if (this.#config.debugTimings) {
 			const collectMs = timings.collected - timings.start;
 			const generateMs = timings.generated - timings.collected;
 			const createMs = timings.created - timings.generated;
@@ -692,7 +676,7 @@ export class LinkHints {
 
 	#generateHints(count: number): string[] {
 		if (count <= 0) return [];
-		const chars = config.hintChars.toUpperCase();
+		const chars = this.#config.hintChars.toUpperCase();
 		const base = chars.length;
 
 		let length = 1;
@@ -745,16 +729,16 @@ export class LinkHints {
 		const minLeft = scrollX + 2;
 		const maxLeft = scrollX + window.innerWidth - 30;
 		const minTop = scrollY + 2;
-		const offsetX = config.hintOffset.x;
-		const offsetY = config.hintOffset.y;
+		const offsetX = this.#config.hintOffset.x;
+		const offsetY = this.#config.hintOffset.y;
 
 		this.#hints.forEach((hint, i) => {
 			const { rect } = elements[i];
 
 			let left =
-				config.hintAlign === 'right'
+				this.#config.hintAlign === 'right'
 					? rect.right + scrollX + offsetX
-					: config.hintAlign === 'center'
+					: this.#config.hintAlign === 'center'
 						? rect.left + rect.width / 2 + scrollX + offsetX
 						: rect.left + scrollX + offsetX;
 
@@ -834,7 +818,7 @@ export class LinkHints {
 		if (!input) {
 			for (const hint of this.#hints) {
 				hint.label.style.display = 'none';
-				if (config.showElementBorder) {
+				if (this.#config.showElementBorder) {
 					hint.element.classList.remove('link-hint-target');
 					hint.element.classList.remove('link-hint-target-input');
 				}
@@ -875,7 +859,7 @@ export class LinkHints {
 				hint.label.style.display = 'block';
 				hint.matchedSpan.textContent = '';
 				hint.remainingSpan.textContent = labelByIndex.get(i) ?? '';
-				if (config.showElementBorder) {
+				if (this.#config.showElementBorder) {
 					if (hint.isEditable) {
 						hint.element.classList.add('link-hint-target-input');
 						hint.element.classList.remove('link-hint-target');
@@ -886,7 +870,7 @@ export class LinkHints {
 				}
 			} else {
 				hint.label.style.display = 'none';
-				if (config.showElementBorder) {
+				if (this.#config.showElementBorder) {
 					hint.element.classList.remove('link-hint-target');
 					hint.element.classList.remove('link-hint-target-input');
 				}
