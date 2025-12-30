@@ -24,5 +24,5 @@ This is a Chrome Manifest V3 extension for keyboard-driven link navigation.
 
 **Key configuration points:**
 - `hintChars` property in `LinkHints` class controls which keys are used for hints (default: `asdfghjkl`)
-- `hints.css` controls hint label appearance
+- `style.css` controls hint label appearance
 - `manifest.json` defines the keyboard shortcut (`Alt+F`) under `commands`

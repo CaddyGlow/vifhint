@@ -3,8 +3,8 @@
 	"version": "1.0.0",
 	"description": "Minimal link hints Chrome extension",
 	"scripts": {
-		"build": "bun build src/content.ts --outfile=dist/content.js && bun build src/background.ts --outfile=dist/background.js && cp ./manifest.json ./hints.css ./dist/ && cp -r ./icons ./dist/",
-		"build:firefox": "rm -rf dist-firefox && mkdir -p dist-firefox && bun build src/content.ts --outfile=dist-firefox/content.js && bun build src/background.ts --outfile=dist-firefox/background.js && cp ./manifest.firefox.json ./hints.css dist-firefox/manifest.json && cp -r ./icons ./dist-firefox/",
+		"build": "bun build src/content.ts --outfile=dist/content.js && bun build src/background.ts --outfile=dist/background.js && bun build src/popup.ts --outfile=dist/popup.js && cp ./manifest.json ./style.css ./popup.html ./popup.css ./dist/ && cp -r ./icons ./dist/",
+		"build:firefox": "rm -rf dist-firefox && mkdir -p dist-firefox && bun build src/content.ts --outfile=dist-firefox/content.js && bun build src/background.ts --outfile=dist-firefox/background.js && bun build src/popup.ts --outfile=dist-firefox/popup.js && cp ./style.css ./popup.html ./popup.css dist-firefox/ && cp ./manifest.firefox.json dist-firefox/manifest.json && cp -r ./icons ./dist-firefox/",
 		"release": "bun run build && (cd dist && zip -r ../vifhint-$(bun -e 'console.log(require(\"./manifest.json\").version)')-$(git rev-parse --short HEAD).zip .)",
 		"icons:generate": "bash scripts/generate-icons.sh",
 		"hooks:install": "git config core.hooksPath .githooks",

@@ -81,7 +81,7 @@ Edit `src/config.ts` to tweak defaults:
 
 ### Change Hint Styling
 
-Edit `hints.css` to customize the appearance of hint labels.
+Edit `style.css` to customize the appearance of hint labels.
 
 ## Development
 

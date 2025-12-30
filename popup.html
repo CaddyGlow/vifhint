@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>VifHint</title>
+		<link rel="stylesheet" href="popup.css" />
+	</head>
+	<body>
+		<main class="popup">
+			<header class="popup-header">
+				<div class="popup-title">VifHint</div>
+				<div class="popup-subtitle">Site controls</div>
+			</header>
+			<section class="popup-site">
+				<div class="popup-label">Current site</div>
+				<div class="popup-host" data-site>—</div>
+			</section>
+			<section class="popup-status">
+				<div class="popup-label">Status</div>
+				<div class="popup-state" data-status>Checking…</div>
+			</section>
+			<section class="popup-actions">
+				<button class="popup-button" data-action="temporary" type="button">
+					Disable for this site (temporary)
+				</button>
+				<button class="popup-button" data-action="permanent" type="button">
+					Disable for this site (always)
+				</button>
+				<button class="popup-button" data-action="enabled" type="button">
+					Enable on this site
+				</button>
+			</section>
+			<footer class="popup-footnote" data-note></footer>
+		</main>
+		<script src="popup.js"></script>
+	</body>
+</html>

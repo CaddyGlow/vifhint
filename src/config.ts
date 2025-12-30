@@ -186,7 +186,7 @@ export const appConfig: AppConfig = {
 		findmode: 'custom',
 		// Scroll amount as a fraction of the viewport height (e.g. 0.5 = half page).
 		scroll: 0.5,
-		// Base16 palette used by hints.css.
+		// Base16 palette used by style.css.
 		colorsheme: 'base16-vif-dark',
 		// Vim-style caret options.
 		caret: {

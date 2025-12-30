@@ -14,6 +14,8 @@ type CommandExecutor = {
 
 type KeySequenceListener = (event: KeySequenceEvent) => void;
 
+type EnabledCheck = () => boolean;
+
 // Trie node for efficient prefix matching
 interface TrieNode {
 	children: Map<string, TrieNode>;
@@ -193,6 +195,7 @@ export class KeyBindings {
 	#lastInputIndex = -1;
 	#countBuffer = '';
 	#countTimeoutId: number | null = null;
+	#isEnabled: EnabledCheck | null = null;
 
 	constructor(
 		linkHints: LinkHintsInterface,
@@ -200,7 +203,11 @@ export class KeyBindings {
 		search?: SearchController,
 		helpOverlay?: HelpOverlayController,
 		keymaps: readonly Keymap[] = appConfig.keymaps,
-		options?: { commandExecutor?: CommandExecutor; onKeySequence?: KeySequenceListener },
+		options?: {
+			commandExecutor?: CommandExecutor;
+			onKeySequence?: KeySequenceListener;
+			isEnabled?: EnabledCheck;
+		},
 	) {
 		this.#linkHints = linkHints;
 		this.#selection = selection;
@@ -208,6 +215,7 @@ export class KeyBindings {
 		this.#helpOverlay = helpOverlay ?? null;
 		this.#commandExecutor = options?.commandExecutor ?? null;
 		this.#onKeySequence = options?.onKeySequence ?? null;
+		this.#isEnabled = options?.isEnabled ?? null;
 		this.#keymaps = [...keymaps];
 		const normalized = normalizeKeymaps(this.#keymaps, appConfig.options.leader);
 		this.#handler = new KeySequenceHandler(normalized, appConfig.options.timeoutlen);
@@ -228,6 +236,7 @@ export class KeyBindings {
 		document.addEventListener(
 			'keydown',
 			(e) => {
+				if (this.#isEnabled && !this.#isEnabled()) return;
 				const token = eventToKeyToken(e);
 
 				if (this.#helpOverlay?.isVisible()) {

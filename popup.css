@@ -1,0 +1,130 @@
+:root {
+	--popup-bg: #f4efe3;
+	--popup-bg-accent: #e4f0e6;
+	--popup-card: #fffaf0;
+	--popup-text: #1f1a14;
+	--popup-muted: #6b5f55;
+	--popup-border: rgba(48, 60, 55, 0.16);
+	--popup-accent: #2f6f6d;
+	--popup-accent-strong: #1f4d48;
+	--popup-warn: #b3541e;
+	--popup-shadow: 0 18px 30px rgba(31, 26, 20, 0.16);
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	padding: 0;
+	font-family: "Alegreya Sans", "Trebuchet MS", sans-serif;
+	color: var(--popup-text);
+	background: linear-gradient(135deg, var(--popup-bg), var(--popup-bg-accent));
+	width: 320px;
+}
+
+.popup {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	padding: 16px;
+}
+
+.popup-header {
+	background: var(--popup-card);
+	border-radius: 14px;
+	padding: 12px 14px;
+	box-shadow: var(--popup-shadow);
+	border: 1px solid var(--popup-border);
+}
+
+.popup-title {
+	font-size: 18px;
+	font-weight: 700;
+	letter-spacing: 0.4px;
+}
+
+.popup-subtitle {
+	color: var(--popup-muted);
+	font-size: 12px;
+	text-transform: uppercase;
+	letter-spacing: 1.2px;
+	margin-top: 4px;
+}
+
+.popup-site,
+.popup-status {
+	background: var(--popup-card);
+	border-radius: 12px;
+	padding: 12px 14px;
+	border: 1px solid var(--popup-border);
+}
+
+.popup-label {
+	color: var(--popup-muted);
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 1px;
+}
+
+.popup-host {
+	font-size: 15px;
+	font-weight: 600;
+	margin-top: 6px;
+	word-break: break-all;
+}
+
+.popup-state {
+	font-size: 14px;
+	margin-top: 6px;
+	font-weight: 600;
+	color: var(--popup-accent-strong);
+}
+
+.popup-state.is-warning {
+	color: var(--popup-warn);
+}
+
+.popup-actions {
+	display: grid;
+	gap: 10px;
+}
+
+.popup-button {
+	border: 1px solid var(--popup-border);
+	border-radius: 12px;
+	padding: 10px 12px;
+	background: var(--popup-card);
+	color: var(--popup-text);
+	font-size: 13px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+	text-align: left;
+}
+
+.popup-button:hover {
+	border-color: rgba(47, 111, 109, 0.35);
+	box-shadow: 0 10px 18px rgba(31, 26, 20, 0.12);
+	transform: translateY(-1px);
+}
+
+.popup-button.is-selected {
+	border-color: var(--popup-accent);
+	background: rgba(47, 111, 109, 0.12);
+	color: var(--popup-accent-strong);
+}
+
+.popup-button:disabled {
+	cursor: default;
+	opacity: 0.6;
+	box-shadow: none;
+	transform: none;
+}
+
+.popup-footnote {
+	font-size: 11px;
+	color: var(--popup-muted);
+	line-height: 1.4;
+}

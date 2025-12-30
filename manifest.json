@@ -9,7 +9,11 @@
 		"48": "icons/icon48.png",
 		"128": "icons/icon128.png"
 	},
-	"permissions": ["activeTab", "tabs", "sessions"],
+	"permissions": ["activeTab", "tabs", "sessions", "storage"],
+	"action": {
+		"default_popup": "popup.html",
+		"default_title": "VifHint"
+	},
 	"background": {
 		"service_worker": "background.js"
 	},
@@ -17,7 +21,7 @@
 		{
 			"matches": ["<all_urls>"],
 			"js": ["content.js"],
-			"css": ["hints.css"],
+			"css": ["style.css"],
 			"run_at": "document_end"
 		}
 	],

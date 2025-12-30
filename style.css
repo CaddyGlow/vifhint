@@ -104,6 +104,11 @@
 	display: none;
 }
 
+.link-hint-input.is-placeholder {
+	color: var(--hint-base05);
+	letter-spacing: 0.08em;
+}
+
 .link-hint-target {
 	outline: 2px dashed var(--hint-base0f) !important;
 	outline-offset: -2px !important;

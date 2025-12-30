@@ -3,6 +3,7 @@
 import { PluginHost } from './plugins/host';
 import { pluginRegistry } from './plugins/registry';
 import type { UiApi } from './plugins/types';
+import { clearTemporaryFallbackHosts } from './site-disable';
 
 const ui: UiApi = {
 	toast: (message) => {
@@ -14,6 +15,13 @@ const pluginHost = new PluginHost({
 	context: 'background',
 	registry: pluginRegistry,
 	ui,
+});
+
+chrome.runtime.onStartup.addListener(() => {
+	void clearTemporaryFallbackHosts();
+});
+chrome.runtime.onInstalled.addListener(() => {
+	void clearTemporaryFallbackHosts();
 });
 
 void pluginHost.activateStartup();

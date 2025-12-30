@@ -23,6 +23,7 @@ type HintAlign = 'left' | 'center' | 'right';
 type LinkHintsOptions = {
 	readonly onActivate?: (mode: HintMode) => void;
 	readonly onDeactivate?: () => void;
+	readonly isEnabled?: () => boolean;
 };
 
 interface HintConfig {
@@ -381,10 +382,12 @@ export class LinkHints {
 	#numberMap = new Map<string, number>();
 	#onActivate?: (mode: HintMode) => void;
 	#onDeactivate?: () => void;
+	#isEnabled: () => boolean;
 
 	constructor(options: LinkHintsOptions = {}) {
 		this.#onActivate = options.onActivate;
 		this.#onDeactivate = options.onDeactivate;
+		this.#isEnabled = options.isEnabled ?? (() => true);
 		this.#setupKeyListener();
 		this.#setupCommandListener();
 	}
@@ -393,7 +396,14 @@ export class LinkHints {
 		return this.#active;
 	}
 
+	deactivate(): void {
+		if (this.#active) {
+			this.#deactivate();
+		}
+	}
+
 	activate(mode: HintMode = 'normal'): void {
+		if (!this.#isEnabled()) return;
 		if (!this.#active) {
 			this.#mode = mode;
 			this.#activate();
@@ -403,6 +413,7 @@ export class LinkHints {
 	#setupCommandListener(): void {
 		chrome.runtime.onMessage.addListener((message) => {
 			if (message.command === 'activate-hints') {
+				if (!this.#isEnabled()) return;
 				this.#toggle();
 			}
 		});
@@ -413,6 +424,10 @@ export class LinkHints {
 			'keydown',
 			(e) => {
 				if (!this.#active) return;
+				if (!this.#isEnabled()) {
+					this.#deactivate();
+					return;
+				}
 
 				e.preventDefault();
 				e.stopPropagation();
@@ -500,6 +515,7 @@ export class LinkHints {
 	}
 
 	#toggle(): void {
+		if (!this.#isEnabled()) return;
 		if (this.#active) {
 			this.#deactivate();
 		} else {
@@ -518,6 +534,7 @@ export class LinkHints {
 		this.#numberMap.clear();
 
 		this.#createInputDisplay();
+		this.#updateInputDisplay();
 		this.#attachResizeListener();
 
 		const timings: Record<string, number> = {};
@@ -600,6 +617,14 @@ export class LinkHints {
 
 	#updateInputDisplay(): void {
 		if (this.#inputDisplay) {
+			if (this.#mode === 'search' && this.#currentInput.length === 0) {
+				this.#inputDisplay.textContent = 'HINT MODE';
+				this.#inputDisplay.classList.add('is-placeholder');
+				this.#inputDisplay.style.display = 'block';
+				return;
+			}
+
+			this.#inputDisplay.classList.remove('is-placeholder');
 			this.#inputDisplay.textContent = this.#currentInput.toUpperCase();
 			this.#inputDisplay.style.display = this.#currentInput ? 'block' : 'none';
 		}
