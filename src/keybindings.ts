@@ -353,6 +353,8 @@ export class KeyBindings {
 			this.#linkHints.activate('newTab');
 		} else if (operation === 'hints:backgroundTab') {
 			this.#linkHints.activate('backgroundTab');
+		} else if (operation === 'hints:search') {
+			this.#linkHints.activate('search');
 		} else if (operation === 'scroll:top') {
 			window.scrollTo({ top: 0, behavior: 'smooth' });
 		} else if (operation === 'scroll:bottom') {

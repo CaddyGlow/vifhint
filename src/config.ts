@@ -5,6 +5,7 @@ export type CoreCommand =
 	| 'hints:activate'
 	| 'hints:newTab'
 	| 'hints:backgroundTab'
+	| 'hints:search'
 	| 'scroll:top'
 	| 'scroll:bottom'
 	| 'scroll:half-down'
@@ -109,6 +110,12 @@ export const appConfig: AppConfig = {
 			lhs: 'gF',
 			rhs: 'hints:backgroundTab',
 			desc: 'Open link in background tab',
+			repeatable: false,
+		},
+		{
+			lhs: '<leader>/',
+			rhs: 'hints:search',
+			desc: 'Search hint targets by text',
 			repeatable: false,
 		},
 

@@ -1,1 +1,1 @@
-export type HintMode = 'normal' | 'newTab' | 'backgroundTab';
+export type HintMode = 'normal' | 'newTab' | 'backgroundTab' | 'search';

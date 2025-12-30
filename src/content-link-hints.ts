@@ -14,6 +14,8 @@ interface HintElement {
 	readonly label: HTMLElement;
 	readonly matchedSpan: HTMLSpanElement;
 	readonly remainingSpan: HTMLSpanElement;
+	readonly searchTokens: readonly string[];
+	readonly isEditable: boolean;
 }
 
 type HintAlign = 'left' | 'center' | 'right';
@@ -197,6 +199,41 @@ function shouldDedupeInline(lastData: ElementData, newData: ElementData): boolea
 	return false;
 }
 
+function normalizeSearchToken(token: string | null | undefined): string | null {
+	if (!token) return null;
+	const trimmed = token.trim();
+	return trimmed ? trimmed.toLowerCase() : null;
+}
+
+function collectSearchTokens(element: HTMLElement): string[] {
+	const tokens: string[] = [];
+	const push = (value: string | null | undefined): void => {
+		const normalized = normalizeSearchToken(value);
+		if (normalized) tokens.push(normalized);
+	};
+
+	const isInput =
+		element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.isContentEditable;
+
+	if (isInput) {
+		const input = element as HTMLInputElement | HTMLTextAreaElement;
+		push('placeholder' in input ? input.placeholder : null);
+		push(element.getAttribute('aria-label'));
+		push(element.getAttribute('title'));
+		if (element.isContentEditable) {
+			push(element.innerText);
+		} else {
+			push(input.value);
+		}
+	} else {
+		push(element.innerText);
+		push(element.getAttribute('aria-label'));
+		push(element.getAttribute('title'));
+	}
+
+	return tokens;
+}
+
 function isAccessible(element: HTMLElement, rect: DOMRect): boolean {
 	const centerX = rect.left + rect.width / 2;
 	const centerY = rect.top + rect.height / 2;
@@ -341,6 +378,7 @@ export class LinkHints {
 	#activeHintIndices: number[] = [];
 	#hintMap = new Map<string, number>();
 	#hintLength = 0;
+	#numberMap = new Map<string, number>();
 	#onActivate?: (mode: HintMode) => void;
 	#onDeactivate?: () => void;
 
@@ -392,9 +430,15 @@ export class LinkHints {
 					return;
 				}
 
-				const key = e.key.toLowerCase();
-				if (config.hintChars.includes(key)) {
-					this.#currentInput += key;
+				const key = this.#getEventKey(e);
+				if (this.#mode === 'search') {
+					this.#handleSearchKey(key);
+					return;
+				}
+
+				const lowered = key.toLowerCase();
+				if (config.hintChars.includes(lowered)) {
+					this.#currentInput += lowered;
 					this.#updateInputDisplay();
 					this.#filterHints();
 
@@ -418,6 +462,43 @@ export class LinkHints {
 		);
 	}
 
+	#getEventKey(event: KeyboardEvent): string {
+		if (
+			event.shiftKey &&
+			(event.code.startsWith('Digit') ||
+				event.code.startsWith('Numpad') ||
+				event.code.startsWith('Key'))
+		) {
+			return event.code.slice(-1);
+		}
+		return event.key;
+	}
+
+	#handleSearchKey(key: string): void {
+		if (key.length !== 1) return;
+
+		const lowered = key.toLowerCase();
+		if (/^\d$/.test(lowered) && this.#currentInput.length > 0) {
+			const matchIndex = this.#numberMap.get(lowered);
+			if (matchIndex !== undefined) {
+				this.#clickElement(this.#hints[matchIndex].element);
+				this.#deactivate();
+			}
+			return;
+		}
+
+		const previousInput = this.#currentInput;
+		this.#currentInput += lowered;
+		this.#updateInputDisplay();
+		this.#filterHints();
+
+		if (this.#activeHintIndices.length === 0) {
+			this.#currentInput = previousInput;
+			this.#updateInputDisplay();
+			this.#filterHints();
+		}
+	}
+
 	#toggle(): void {
 		if (this.#active) {
 			this.#deactivate();
@@ -434,6 +515,7 @@ export class LinkHints {
 		this.#activeHintIndices = [];
 		this.#hintMap.clear();
 		this.#hintLength = 0;
+		this.#numberMap.clear();
 
 		this.#createInputDisplay();
 		this.#attachResizeListener();
@@ -449,18 +531,22 @@ export class LinkHints {
 		const elements = sortElementsForHints(collectClickableElements());
 		mark('collected');
 
-		const hintStrings = this.#generateHints(elements.length);
+		const isSearchMode = this.#mode === 'search';
+		const hintStrings = isSearchMode ? [] : this.#generateHints(elements.length);
 		mark('generated');
 
 		this.#hints = elements.map((data, i) => {
-			const { label, matchedSpan, remainingSpan } = this.#createLabel(hintStrings[i]);
+			const hint = hintStrings[i] ?? '';
+			const { label, matchedSpan, remainingSpan } = this.#createLabel(hint);
 			return {
 				element: data.element,
-				hint: hintStrings[i],
-				hintUpper: hintStrings[i].toUpperCase(),
+				hint,
+				hintUpper: hint.toUpperCase(),
 				label,
 				matchedSpan,
 				remainingSpan,
+				searchTokens: isSearchMode ? collectSearchTokens(data.element) : [],
+				isEditable: isEditable(data.element),
 			};
 		});
 		this.#hintMap.clear();
@@ -470,9 +556,9 @@ export class LinkHints {
 		this.#hintLength = hintStrings[0]?.length ?? 0;
 		mark('created');
 
-		if (config.showElementBorder) {
+		if (config.showElementBorder && !isSearchMode) {
 			for (const hint of this.#hints) {
-				if (isEditable(hint.element)) {
+				if (hint.isEditable) {
 					hint.element.classList.add('link-hint-target-input');
 				} else {
 					hint.element.classList.add('link-hint-target');
@@ -483,6 +569,10 @@ export class LinkHints {
 
 		this.#showHints(elements);
 		mark('shown');
+
+		if (isSearchMode) {
+			this.#filterHints();
+		}
 
 		if (config.debugTimings) {
 			const collectMs = timings.collected - timings.start;
@@ -523,6 +613,7 @@ export class LinkHints {
 		this.#activeHintIndices = [];
 		this.#hintMap.clear();
 		this.#hintLength = 0;
+		this.#numberMap.clear();
 		this.#detachResizeListener();
 		for (const hint of this.#hints) {
 			hint.label.remove();
@@ -654,6 +745,11 @@ export class LinkHints {
 	}
 
 	#filterHints(): void {
+		if (this.#mode === 'search') {
+			this.#filterSearchHints();
+			return;
+		}
+
 		const input = this.#currentInput;
 		const inputUpper = input.toUpperCase();
 		const inputLength = input.length;
@@ -682,6 +778,78 @@ export class LinkHints {
 					nextActive.push(i);
 				} else {
 					hint.label.style.display = 'none';
+				}
+			}
+		}
+
+		this.#activeHintIndices = nextActive;
+		this.#lastInput = input;
+	}
+
+	#filterSearchHints(): void {
+		const input = this.#currentInput.toLowerCase();
+		const isIncremental = this.#lastInput !== '' && input.startsWith(this.#lastInput);
+		const nextActive: number[] = [];
+		const matches: number[] = [];
+
+		if (!input) {
+			for (const hint of this.#hints) {
+				hint.label.style.display = 'none';
+				if (config.showElementBorder) {
+					hint.element.classList.remove('link-hint-target');
+					hint.element.classList.remove('link-hint-target-input');
+				}
+			}
+			this.#activeHintIndices = [];
+			this.#lastInput = input;
+			this.#numberMap.clear();
+			return;
+		}
+
+		const indices = isIncremental ? this.#activeHintIndices : this.#hints.map((_, index) => index);
+
+		for (const index of indices) {
+			const hint = this.#hints[index];
+			const matchesQuery = hint.searchTokens.some((token) => token.includes(input));
+			if (matchesQuery) {
+				nextActive.push(index);
+				matches.push(index);
+			}
+		}
+
+		this.#numberMap.clear();
+		let number = 1;
+		const numbered = new Set<number>();
+		const labelByIndex = new Map<number, string>();
+		for (const index of matches) {
+			if (number > 9) break;
+			const label = String(number);
+			this.#numberMap.set(label, index);
+			labelByIndex.set(index, label);
+			numbered.add(index);
+			number += 1;
+		}
+
+		for (let i = 0; i < this.#hints.length; i += 1) {
+			const hint = this.#hints[i];
+			if (numbered.has(i)) {
+				hint.label.style.display = 'block';
+				hint.matchedSpan.textContent = '';
+				hint.remainingSpan.textContent = labelByIndex.get(i) ?? '';
+				if (config.showElementBorder) {
+					if (hint.isEditable) {
+						hint.element.classList.add('link-hint-target-input');
+						hint.element.classList.remove('link-hint-target');
+					} else {
+						hint.element.classList.add('link-hint-target');
+						hint.element.classList.remove('link-hint-target-input');
+					}
+				}
+			} else {
+				hint.label.style.display = 'none';
+				if (config.showElementBorder) {
+					hint.element.classList.remove('link-hint-target');
+					hint.element.classList.remove('link-hint-target-input');
 				}
 			}
 		}
@@ -741,7 +909,7 @@ export class LinkHints {
 	}
 
 	#clickElement(element: HTMLElement): void {
-		if (this.#mode !== 'normal') {
+		if (this.#mode === 'newTab' || this.#mode === 'backgroundTab') {
 			const url = this.#getElementUrl(element);
 			if (url) {
 				chrome.runtime.sendMessage({
