@@ -125,8 +125,6 @@ export const appConfig: AppConfig = {
 		// Selection
 		{ lhs: 'v', rhs: 'selection:toggle', desc: 'Toggle visual mode', repeatable: false },
 		{ lhs: 'V', rhs: 'selection:line-toggle', desc: 'Toggle visual line mode', repeatable: false },
-		{ lhs: 's', rhs: 'selection:expand', desc: 'Expand selection to parent', repeatable: true },
-		{ lhs: 'S', rhs: 'selection:shrink', desc: 'Shrink selection to child', repeatable: true },
 		{ lhs: 'y', rhs: 'selection:yank', desc: 'Yank selection to clipboard', repeatable: false },
 		{ lhs: 'o', rhs: 'selection:swap', desc: 'Swap selection endpoint', repeatable: false },
 

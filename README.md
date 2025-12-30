@@ -93,8 +93,84 @@ Or inline JSON:
 VIFHINT_USER_CONFIG_JSON='{"options":{"leader":","}}' bun run build
 ```
 
+Or export a TypeScript config module:
+
+```bash
+VIFHINT_USER_CONFIG_TS=/path/to/vifhint.config.ts bun run build
+```
+
+Example `vifhint.config.ts`:
+
+```ts
+export default {
+	plugins: {
+		'hint.whichKey': { enabled: false },
+	},
+	options: {
+		leader: ',',
+	},
+};
+```
+
 The user config merges on top of defaults. For keymaps, set `keymapMode` to `replace` to
 fully override defaults (otherwise it merges by `lhs`).
+
+### Build-time User Plugin (TypeScript/JavaScript)
+
+You can also inject a TypeScript/JavaScript module that is bundled as `user-plugin.js`
+and executed via the plugin system (no repo edits required):
+
+```bash
+VIFHINT_USER_PLUGIN_TS=/path/to/user-plugin.ts bun run build
+```
+
+JavaScript works too:
+
+```bash
+VIFHINT_USER_PLUGIN_PATH=/path/to/user-plugin.js bun run build
+```
+
+### Build-time Plugin Filtering (Reduce Bundle Size)
+
+Allowlist mode (only include these plugins):
+
+```bash
+VIFHINT_PLUGINS="hint.user hint.whichKey" bun run build
+```
+
+Disablelist mode (include everything except these):
+
+```bash
+VIFHINT_DISABLE_PLUGINS=hint.whichKey bun run build
+```
+
+Comma/space separated values are supported:
+
+```bash
+VIFHINT_DISABLE_PLUGINS="hint.whichKey hint.user" bun run build
+```
+
+Notes:
+- Allowlist is strict: plugins not listed are omitted from the bundle.
+- Disablelist starts from all known plugins and removes the listed ones.
+- Do not set both `VIFHINT_PLUGINS` and `VIFHINT_DISABLE_PLUGINS`.
+
+The module can export `activateContent` / `activateBackground` (same signature as plugins),
+or a default function used for both contexts.
+
+```ts
+import type { PluginContext } from './src/plugins/types';
+
+export const activateContent = (ctx: PluginContext) => {
+	ctx.log('user plugin loaded');
+};
+```
+
+Enable/disable it via config:
+
+```json
+{ "plugins": { "hint.user": { "enabled": true } } }
+```
 
 ### Runtime Overrides
 
@@ -132,6 +208,8 @@ bun run typecheck
 ```
 
 After making changes, rebuild and reload the extension in Chrome.
+
+Internal API reference: `docs/INTERNAL_API.md`.
 
 ## License
 

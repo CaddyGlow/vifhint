@@ -399,16 +399,6 @@ export class KeyBindings {
 			this.#selection.scrollAndFollow(-window.innerHeight * baseStep * steps);
 		} else if (operation === 'focus:input') {
 			this.#focusNextInput(count, hasCount);
-		} else if (operation === 'selection:expand') {
-			const steps = Math.max(1, count);
-			for (let i = 0; i < steps; i += 1) {
-				this.#selection.expand();
-			}
-		} else if (operation === 'selection:shrink') {
-			const steps = Math.max(1, count);
-			for (let i = 0; i < steps; i += 1) {
-				this.#selection.shrink();
-			}
 		} else if (operation === 'selection:yank') {
 			this.#selection.yank();
 		} else if (operation === 'selection:toggle') {

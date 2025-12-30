@@ -1,6 +1,8 @@
 node_modules/
 dist/
 dist-firefox/
+src/plugins/registry.generated.ts
+src/plugins/registry.generated.ts.map
 *.log
 .DS_Store
 .npm-cache/
