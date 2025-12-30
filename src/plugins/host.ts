@@ -200,6 +200,26 @@ export class PluginHost {
 		}
 	}
 
+	dispose(): void {
+		for (const state of this.#states.values()) {
+			if (state.dispose) {
+				try {
+					state.dispose();
+				} catch (error) {
+					this.#log('[plugin] dispose failed', error);
+				}
+			}
+			state.dispose = undefined;
+			state.activated = false;
+			state.loading = undefined;
+		}
+		this.#eventHandlers.clear();
+		this.#commands.clear();
+		this.#commandOwners.clear();
+		this.#keymaps = [];
+		this.#pendingKeymaps = [];
+	}
+
 	async activatePlugin(pluginId: string): Promise<void> {
 		const state = this.#states.get(pluginId);
 		if (!state || !state.enabled) return;

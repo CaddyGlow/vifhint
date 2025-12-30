@@ -14,9 +14,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: latest
+        uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -30,11 +28,36 @@ jobs:
       - name: Format check
         run: bun run format:check
 
-      - name: Build extension
-        run: bun run build
+      - name: Build debug
+        run: bun run build:debug
 
-      - name: Upload dist artifact
+      - name: Build release
+        run: bun run build:release
+
+      - name: Upload Chrome extension (release)
         uses: actions/upload-artifact@v4
         with:
-          name: extension-dist
-          path: dist
+          name: vifhint-chrome
+          path: dist/
+
+  build-firefox:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build Firefox release
+        run: bun run build:firefox:release
+
+      - name: Upload Firefox extension (release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: vifhint-firefox
+          path: dist-firefox/

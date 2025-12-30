@@ -95,6 +95,10 @@ export class HelpOverlay {
 		return this.#overlay.classList.contains('is-visible');
 	}
 
+	dispose(): void {
+		this.#overlay.remove();
+	}
+
 	#ensureAttached(): void {
 		if (this.#overlay.isConnected) return;
 		const host = document.body ?? document.documentElement;

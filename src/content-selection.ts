@@ -9,16 +9,20 @@ export class IncrementalSelection {
 	#caret: HTMLDivElement | null = null;
 	#caretUpdateId: number | null = null;
 	#preferredCaretX: number | null = null;
+	#onKeyDown?: (event: KeyboardEvent) => void;
+	#onDomContentLoaded?: () => void;
+	#initTimerId: number | null = null;
 
 	constructor() {
-		document.addEventListener('keydown', (event) => {
+		this.#onKeyDown = (event) => {
 			if (event.key === 'Escape' && this.#caretMode) {
 				event.preventDefault();
 				event.stopPropagation();
 				event.stopImmediatePropagation();
 				this.#exitCaretMode();
 			}
-		});
+		};
+		document.addEventListener('keydown', this.#onKeyDown);
 
 		document.addEventListener('selectionchange', this.#scheduleCaretUpdate);
 		window.addEventListener('scroll', this.#scheduleCaretUpdate, { passive: true });
@@ -32,9 +36,50 @@ export class IncrementalSelection {
 		};
 
 		if (document.readyState === 'loading') {
-			document.addEventListener('DOMContentLoaded', init, { once: true });
+			this.#onDomContentLoaded = () => {
+				init();
+			};
+			document.addEventListener('DOMContentLoaded', this.#onDomContentLoaded, { once: true });
 		} else {
-			window.setTimeout(init, 0);
+			this.#initTimerId = window.setTimeout(init, 0);
+		}
+	}
+
+	dispose(): void {
+		if (this.#onKeyDown) {
+			document.removeEventListener('keydown', this.#onKeyDown);
+			this.#onKeyDown = undefined;
+		}
+		document.removeEventListener('selectionchange', this.#scheduleCaretUpdate);
+		window.removeEventListener('scroll', this.#scheduleCaretUpdate);
+		window.removeEventListener('resize', this.#scheduleCaretUpdate);
+		document.removeEventListener('focusin', this.#scheduleCaretUpdate);
+		document.removeEventListener('focusout', this.#scheduleCaretUpdate);
+
+		if (this.#onDomContentLoaded) {
+			document.removeEventListener('DOMContentLoaded', this.#onDomContentLoaded);
+			this.#onDomContentLoaded = undefined;
+		}
+		if (this.#initTimerId !== null) {
+			window.clearTimeout(this.#initTimerId);
+			this.#initTimerId = null;
+		}
+		if (this.#caretUpdateId !== null) {
+			window.cancelAnimationFrame(this.#caretUpdateId);
+			this.#caretUpdateId = null;
+		}
+
+		this.#rangeStack = [];
+		this.#caretMode = false;
+		this.#linewiseMode = false;
+		this.#hideIndicator();
+		if (this.#indicator) {
+			this.#indicator.remove();
+			this.#indicator = null;
+		}
+		if (this.#caret) {
+			this.#caret.remove();
+			this.#caret = null;
 		}
 	}
 

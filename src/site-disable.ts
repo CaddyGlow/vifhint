@@ -2,6 +2,7 @@ export type SiteDisableState = 'enabled' | 'temporary' | 'permanent';
 
 const PERMANENT_KEY = 'hint.disabledHosts';
 const TEMPORARY_KEY = 'hint.disabledHostsSession';
+const GLOBAL_KEY = 'hint.globalEnabled';
 
 type StorageArea = chrome.storage.StorageArea;
 
@@ -9,13 +10,18 @@ type StorageSessionShim = {
 	readonly session?: StorageArea;
 };
 
+function isExtensionContext(): boolean {
+	if (typeof location === 'undefined') return false;
+	return location.protocol === 'chrome-extension:' || location.protocol === 'moz-extension:';
+}
+
 function getSessionStorage(): StorageArea | null {
 	const storage = chrome.storage as unknown as StorageSessionShim;
 	return storage.session ?? null;
 }
 
 function getTemporaryStorage(): { area: StorageArea; fallback: boolean } {
-	const session = getSessionStorage();
+	const session = isExtensionContext() ? getSessionStorage() : null;
 	if (session) return { area: session, fallback: false };
 	return { area: chrome.storage.local, fallback: true };
 }
@@ -71,6 +77,18 @@ export async function getSiteDisableState(host: string): Promise<SiteDisableStat
 	if (permanent.includes(normalized)) return 'permanent';
 	if (temporary.includes(normalized)) return 'temporary';
 	return 'enabled';
+}
+
+export async function getGlobalEnabled(): Promise<boolean> {
+	const result = await chrome.storage.local.get(GLOBAL_KEY);
+	if (Object.prototype.hasOwnProperty.call(result, GLOBAL_KEY)) {
+		return result[GLOBAL_KEY] !== false;
+	}
+	return true;
+}
+
+export async function setGlobalEnabled(enabled: boolean): Promise<void> {
+	await chrome.storage.local.set({ [GLOBAL_KEY]: enabled });
 }
 
 export async function setSiteDisableState(host: string, state: SiteDisableState): Promise<void> {

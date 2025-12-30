@@ -17,6 +17,6 @@
 		}
 	},
 	"files": {
-		"ignore": ["dist", "node_modules", "package-lock.json"]
+		"ignore": ["dist", "dist-firefox", "node_modules", "package-lock.json"]
 	}
 }

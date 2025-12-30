@@ -383,6 +383,8 @@ export class LinkHints {
 	#onActivate?: (mode: HintMode) => void;
 	#onDeactivate?: () => void;
 	#isEnabled: () => boolean;
+	#onKeyDown?: (event: KeyboardEvent) => void;
+	#onRuntimeMessage?: (message: unknown) => void;
 
 	constructor(options: LinkHintsOptions = {}) {
 		this.#onActivate = options.onActivate;
@@ -410,71 +412,83 @@ export class LinkHints {
 		}
 	}
 
+	dispose(): void {
+		this.deactivate();
+		this.#detachResizeListener();
+		if (this.#onKeyDown) {
+			document.removeEventListener('keydown', this.#onKeyDown, true);
+			this.#onKeyDown = undefined;
+		}
+		if (this.#onRuntimeMessage) {
+			chrome.runtime.onMessage.removeListener(this.#onRuntimeMessage);
+			this.#onRuntimeMessage = undefined;
+		}
+	}
+
 	#setupCommandListener(): void {
-		chrome.runtime.onMessage.addListener((message) => {
-			if (message.command === 'activate-hints') {
+		this.#onRuntimeMessage = (message) => {
+			const payload = message as { command?: string } | null;
+			if (payload?.command === 'activate-hints') {
 				if (!this.#isEnabled()) return;
 				this.#toggle();
 			}
-		});
+		};
+		chrome.runtime.onMessage.addListener(this.#onRuntimeMessage);
 	}
 
 	#setupKeyListener(): void {
-		document.addEventListener(
-			'keydown',
-			(e) => {
-				if (!this.#active) return;
-				if (!this.#isEnabled()) {
-					this.#deactivate();
-					return;
+		this.#onKeyDown = (e) => {
+			if (!this.#active) return;
+			if (!this.#isEnabled()) {
+				this.#deactivate();
+				return;
+			}
+
+			e.preventDefault();
+			e.stopPropagation();
+			e.stopImmediatePropagation();
+
+			if (e.key === 'Escape') {
+				this.#deactivate();
+				return;
+			}
+
+			if (e.key === 'Backspace') {
+				this.#currentInput = this.#currentInput.slice(0, -1);
+				this.#updateInputDisplay();
+				this.#filterHints();
+				return;
+			}
+
+			const key = this.#getEventKey(e);
+			if (this.#mode === 'search') {
+				this.#handleSearchKey(key);
+				return;
+			}
+
+			const lowered = key.toLowerCase();
+			if (config.hintChars.includes(lowered)) {
+				this.#currentInput += lowered;
+				this.#updateInputDisplay();
+				this.#filterHints();
+
+				if (this.#hintLength > 0 && this.#currentInput.length === this.#hintLength) {
+					const matchIndex = this.#hintMap.get(this.#currentInput);
+					if (matchIndex !== undefined) {
+						this.#clickElement(this.#hints[matchIndex].element);
+						this.#deactivate();
+						return;
+					}
 				}
 
-				e.preventDefault();
-				e.stopPropagation();
-				e.stopImmediatePropagation();
-
-				if (e.key === 'Escape') {
-					this.#deactivate();
-					return;
-				}
-
-				if (e.key === 'Backspace') {
+				if (this.#activeHintIndices.length === 0) {
 					this.#currentInput = this.#currentInput.slice(0, -1);
 					this.#updateInputDisplay();
 					this.#filterHints();
-					return;
 				}
-
-				const key = this.#getEventKey(e);
-				if (this.#mode === 'search') {
-					this.#handleSearchKey(key);
-					return;
-				}
-
-				const lowered = key.toLowerCase();
-				if (config.hintChars.includes(lowered)) {
-					this.#currentInput += lowered;
-					this.#updateInputDisplay();
-					this.#filterHints();
-
-					if (this.#hintLength > 0 && this.#currentInput.length === this.#hintLength) {
-						const matchIndex = this.#hintMap.get(this.#currentInput);
-						if (matchIndex !== undefined) {
-							this.#clickElement(this.#hints[matchIndex].element);
-							this.#deactivate();
-							return;
-						}
-					}
-
-					if (this.#activeHintIndices.length === 0) {
-						this.#currentInput = this.#currentInput.slice(0, -1);
-						this.#updateInputDisplay();
-						this.#filterHints();
-					}
-				}
-			},
-			true,
-		);
+			}
+		};
+		document.addEventListener('keydown', this.#onKeyDown, true);
 	}
 
 	#getEventKey(event: KeyboardEvent): string {

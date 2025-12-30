@@ -1,12 +1,17 @@
+import { appConfig } from './config';
 import {
 	type SiteDisableState,
+	getGlobalEnabled,
 	getSiteDisableState,
 	isTemporaryFallbackStorage,
+	setGlobalEnabled,
 	setSiteDisableState,
 } from './site-disable';
 
 const siteEl = document.querySelector<HTMLElement>('[data-site]');
 const statusEl = document.querySelector<HTMLElement>('[data-status]');
+const globalStatusEl = document.querySelector<HTMLElement>('[data-global-status]');
+const globalToggleButton = document.querySelector<HTMLButtonElement>('[data-global-toggle]');
 const noteEl = document.querySelector<HTMLElement>('[data-note]');
 const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-action]'));
 
@@ -20,6 +25,13 @@ type ActiveContext = {
 	tabId: number;
 	host: string;
 };
+
+function setGlobalStatus(enabled: boolean): void {
+	if (!globalStatusEl || !globalToggleButton) return;
+	globalStatusEl.textContent = enabled ? 'Enabled' : 'Disabled';
+	globalStatusEl.classList.toggle('is-warning', !enabled);
+	globalToggleButton.textContent = enabled ? 'Disable everywhere' : 'Enable everywhere';
+}
 
 function setStatus(text: string, options: { warning?: boolean } = {}): void {
 	if (!statusEl) return;
@@ -74,9 +86,17 @@ async function getActiveContext(): Promise<ActiveContext | null> {
 
 async function updateState(context: ActiveContext): Promise<void> {
 	const state = await getSiteDisableState(context.host);
-	setStatus(stateLabels[state]);
-	highlightState(state);
+	const globalEnabled = await getGlobalEnabled();
+	setGlobalStatus(globalEnabled);
 	setSiteText(context.host);
+	highlightState(state);
+	if (!globalEnabled) {
+		setStatus('Globally disabled', { warning: true });
+		setNote('Global disable overrides site settings.');
+		return;
+	}
+
+	setStatus(stateLabels[state]);
 	if (state === 'enabled') {
 		setNote('Hints and keymaps are active on this site.');
 	} else if (state === 'temporary') {
@@ -98,12 +118,41 @@ async function applyState(context: ActiveContext, state: SiteDisableState): Prom
 	);
 }
 
+async function broadcastGlobalState(enabled: boolean): Promise<void> {
+	const tabs = await chrome.tabs.query({});
+	for (const tab of tabs) {
+		if (!tab.id) continue;
+		chrome.tabs.sendMessage(tab.id, { type: 'hint:global-state', enabled }, () => {
+			void chrome.runtime.lastError;
+		});
+	}
+}
+
 async function init(): Promise<void> {
+	document.documentElement.dataset.hintColorsheme = appConfig.options.colorsheme;
+
 	if (isTemporaryFallbackStorage()) {
 		setNote('Temporary disables reset when the browser restarts.');
 	}
 
-	const context = await getActiveContext();
+	let context: ActiveContext | null = null;
+	if (globalToggleButton) {
+		globalToggleButton.addEventListener('click', () => {
+			void (async () => {
+				const current = await getGlobalEnabled();
+				const next = !current;
+				await setGlobalEnabled(next);
+				setGlobalStatus(next);
+				await broadcastGlobalState(next);
+				if (context) {
+					await updateState(context);
+				}
+			})();
+		});
+	}
+
+	context = await getActiveContext();
+	setGlobalStatus(await getGlobalEnabled());
 	if (!context) {
 		setSiteText('Unsupported page');
 		setStatus('Unavailable', { warning: true });

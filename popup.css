@@ -1,14 +1,14 @@
 :root {
-	--popup-bg: #f4efe3;
-	--popup-bg-accent: #e4f0e6;
-	--popup-card: #fffaf0;
-	--popup-text: #1f1a14;
-	--popup-muted: #6b5f55;
-	--popup-border: rgba(48, 60, 55, 0.16);
-	--popup-accent: #2f6f6d;
-	--popup-accent-strong: #1f4d48;
-	--popup-warn: #b3541e;
-	--popup-shadow: 0 18px 30px rgba(31, 26, 20, 0.16);
+	--popup-bg: var(--hint-base00);
+	--popup-bg-accent: var(--hint-base01);
+	--popup-card: var(--hint-base01);
+	--popup-text: var(--hint-base07);
+	--popup-muted: var(--hint-base04);
+	--popup-border: var(--hint-base02);
+	--popup-accent: var(--hint-base0b);
+	--popup-accent-strong: var(--hint-base0d);
+	--popup-warn: var(--hint-base09);
+	--popup-shadow: 0 18px 30px rgba(0, 0, 0, 0.2);
 }
 
 * {
@@ -54,11 +54,16 @@ body {
 }
 
 .popup-site,
-.popup-status {
+.popup-status,
+.popup-global {
 	background: var(--popup-card);
 	border-radius: 12px;
 	padding: 12px 14px;
 	border: 1px solid var(--popup-border);
+}
+
+.popup-global .popup-button {
+	margin-top: 10px;
 }
 
 .popup-label {
@@ -105,14 +110,14 @@ body {
 }
 
 .popup-button:hover {
-	border-color: rgba(47, 111, 109, 0.35);
-	box-shadow: 0 10px 18px rgba(31, 26, 20, 0.12);
+	border-color: rgba(var(--hint-base0b-rgb), 0.35);
+	box-shadow: 0 10px 18px rgba(0, 0, 0, 0.16);
 	transform: translateY(-1px);
 }
 
 .popup-button.is-selected {
 	border-color: var(--popup-accent);
-	background: rgba(47, 111, 109, 0.12);
+	background: rgba(var(--hint-base0b-rgb), 0.12);
 	color: var(--popup-accent-strong);
 }
 

@@ -173,6 +173,7 @@ interface SearchController {
 	isActive(): boolean;
 	close(): void;
 	clearHighlights(): void;
+	dispose?(): void;
 }
 
 // Interface for key bindings overlay
@@ -196,6 +197,7 @@ export class KeyBindings {
 	#countBuffer = '';
 	#countTimeoutId: number | null = null;
 	#isEnabled: EnabledCheck | null = null;
+	#onKeyDown?: (event: KeyboardEvent) => void;
 
 	constructor(
 		linkHints: LinkHintsInterface,
@@ -232,124 +234,130 @@ export class KeyBindings {
 		return this.#keymaps;
 	}
 
+	dispose(): void {
+		if (this.#onKeyDown) {
+			document.removeEventListener('keydown', this.#onKeyDown, true);
+			this.#onKeyDown = undefined;
+		}
+		this.#handler.reset();
+		this.#resetCount();
+	}
+
 	#setupKeyListener(): void {
-		document.addEventListener(
-			'keydown',
-			(e) => {
-				if (this.#isEnabled && !this.#isEnabled()) return;
-				const token = eventToKeyToken(e);
+		this.#onKeyDown = (e) => {
+			if (this.#isEnabled && !this.#isEnabled()) return;
+			const token = eventToKeyToken(e);
 
-				if (this.#helpOverlay?.isVisible()) {
-					if (token === '<Esc>' || token === '?') {
-						this.#helpOverlay.hide();
-						this.#onKeySequence?.({ status: 'none' });
-						e.preventDefault();
-						e.stopPropagation();
-						return;
-					}
-
-					e.preventDefault();
-					e.stopPropagation();
-					return;
-				}
-
-				if (this.#search?.isActive()) {
-					if (token === '<Esc>') {
-						this.#search.close();
-						this.#onKeySequence?.({ status: 'none' });
-						e.preventDefault();
-						e.stopPropagation();
-					}
-					return;
-				}
-
-				// Skip if LinkHints is active
-				if (this.#linkHints.isActive()) return;
-
-				// Escape should blur focused editable elements
-				if (token === '<Esc>' && this.#isEditableActive()) {
-					const active = document.activeElement as HTMLElement | null;
-					if (active) {
-						// Delay blur so page handlers see Escape on the focused element first.
-						window.setTimeout(() => {
-							if (document.activeElement === active) {
-								active.blur();
-							}
-						}, 0);
-					}
-					this.#handler.reset();
-					this.#resetCount();
-					this.#onKeySequence?.({ status: 'none' });
-					return;
-				}
-
-				// Skip if in editable element
-				if (this.#isEditableActive()) return;
-
-				if (!token) return;
-
-				const hasPendingInput = this.#countBuffer.length > 0 || !this.#handler.isIdle();
-
-				// Escape only cancels an in-progress key sequence/count.
-				if (token === '<Esc>' && hasPendingInput) {
-					this.#handler.reset();
-					this.#resetCount();
+			if (this.#helpOverlay?.isVisible()) {
+				if (token === '<Esc>' || token === '?') {
+					this.#helpOverlay.hide();
 					this.#onKeySequence?.({ status: 'none' });
 					e.preventDefault();
 					e.stopPropagation();
 					return;
 				}
 
-				// Escape clears buffer
+				e.preventDefault();
+				e.stopPropagation();
+				return;
+			}
+
+			if (this.#search?.isActive()) {
 				if (token === '<Esc>') {
-					this.#search?.clearHighlights();
-					this.#handler.reset();
-					this.#resetCount();
+					this.#search.close();
 					this.#onKeySequence?.({ status: 'none' });
+					e.preventDefault();
+					e.stopPropagation();
+				}
+				return;
+			}
+
+			// Skip if LinkHints is active
+			if (this.#linkHints.isActive()) return;
+
+			// Escape should blur focused editable elements
+			if (token === '<Esc>' && this.#isEditableActive()) {
+				const active = document.activeElement as HTMLElement | null;
+				if (active) {
+					// Delay blur so page handlers see Escape on the focused element first.
+					window.setTimeout(() => {
+						if (document.activeElement === active) {
+							active.blur();
+						}
+					}, 0);
+				}
+				this.#handler.reset();
+				this.#resetCount();
+				this.#onKeySequence?.({ status: 'none' });
+				return;
+			}
+
+			// Skip if in editable element
+			if (this.#isEditableActive()) return;
+
+			if (!token) return;
+
+			const hasPendingInput = this.#countBuffer.length > 0 || !this.#handler.isIdle();
+
+			// Escape only cancels an in-progress key sequence/count.
+			if (token === '<Esc>' && hasPendingInput) {
+				this.#handler.reset();
+				this.#resetCount();
+				this.#onKeySequence?.({ status: 'none' });
+				e.preventDefault();
+				e.stopPropagation();
+				return;
+			}
+
+			// Escape clears buffer
+			if (token === '<Esc>') {
+				this.#search?.clearHighlights();
+				this.#handler.reset();
+				this.#resetCount();
+				this.#onKeySequence?.({ status: 'none' });
+				return;
+			}
+
+			// Handle numeric count prefixes (e.g., 3gi). Allow bare "0" as a command.
+			if (/^\d$/.test(token) && this.#handler.isIdle()) {
+				if (token === '0' && this.#countBuffer.length === 0) {
+					// Let "0" fall through to bindings (Vim-style).
+				} else {
+					this.#appendCount(token);
+					e.preventDefault();
+					e.stopPropagation();
 					return;
 				}
+			}
 
-				// Handle numeric count prefixes (e.g., 3gi). Allow bare "0" as a command.
-				if (/^\d$/.test(token) && this.#handler.isIdle()) {
-					if (token === '0' && this.#countBuffer.length === 0) {
-						// Let "0" fall through to bindings (Vim-style).
-					} else {
-						this.#appendCount(token);
-						e.preventDefault();
-						e.stopPropagation();
-						return;
-					}
-				}
+			const result = this.#handler.handleKey(token);
 
-				const result = this.#handler.handleKey(token);
-
-				if (result.result === 'match' && result.binding) {
-					const hasCount = this.#countBuffer.length > 0;
-					const count = this.#consumeCount();
-					const repeatable = result.binding.repeatable === true;
-					const effectiveCount = repeatable ? count : 1;
-					const effectiveHasCount = repeatable ? hasCount : false;
-					e.preventDefault();
-					e.stopPropagation();
-					this.#onKeySequence?.({
-						status: 'match',
-						sequence: result.binding.lhs,
-						tokens: result.tokens,
-					});
-					this.#executeOperation(result.binding.rhs, effectiveCount, effectiveHasCount);
-				} else if (result.result === 'partial') {
-					e.preventDefault();
-					e.stopPropagation();
-					this.#onKeySequence?.({ status: 'partial', tokens: result.tokens });
-				} else {
-					// No match; drop any pending count so it doesn't leak to later commands.
-					this.#resetCount();
-					this.#onKeySequence?.({ status: 'none' });
-				}
-				// 'none' - let event propagate normally
-			},
-			true,
-		);
+			if (result.result === 'match' && result.binding) {
+				const hasCount = this.#countBuffer.length > 0;
+				const count = this.#consumeCount();
+				const repeatable = result.binding.repeatable === true;
+				const effectiveCount = repeatable ? count : 1;
+				const effectiveHasCount = repeatable ? hasCount : false;
+				e.preventDefault();
+				e.stopPropagation();
+				this.#onKeySequence?.({
+					status: 'match',
+					sequence: result.binding.lhs,
+					tokens: result.tokens,
+				});
+				this.#executeOperation(result.binding.rhs, effectiveCount, effectiveHasCount);
+			} else if (result.result === 'partial') {
+				e.preventDefault();
+				e.stopPropagation();
+				this.#onKeySequence?.({ status: 'partial', tokens: result.tokens });
+			} else {
+				// No match; drop any pending count so it doesn't leak to later commands.
+				this.#resetCount();
+				this.#onKeySequence?.({ status: 'none' });
+			}
+			// 'none' - let event propagate normally
+		};
+		document.addEventListener('keydown', this.#onKeyDown, true);
 	}
 
 	#executeOperation(operation: Keymap['rhs'], count = 1, hasCount = false): void {

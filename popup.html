@@ -4,6 +4,7 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<title>VifHint</title>
+		<link rel="stylesheet" href="style.css" />
 		<link rel="stylesheet" href="popup.css" />
 	</head>
 	<body>
@@ -15,6 +16,13 @@
 			<section class="popup-site">
 				<div class="popup-label">Current site</div>
 				<div class="popup-host" data-site>—</div>
+			</section>
+			<section class="popup-global">
+				<div class="popup-label">Extension</div>
+				<div class="popup-state" data-global-status>Enabled</div>
+				<button class="popup-button" data-global-toggle type="button">
+					Disable everywhere
+				</button>
 			</section>
 			<section class="popup-status">
 				<div class="popup-label">Status</div>

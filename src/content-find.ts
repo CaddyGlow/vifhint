@@ -304,6 +304,8 @@ export class NativeFindController {
 	}
 
 	clearHighlights(): void {}
+
+	dispose(): void {}
 }
 
 export class CustomFindController {
@@ -439,6 +441,17 @@ export class CustomFindController {
 		}
 		this.#finder.clear();
 		this.#updateCount();
+	}
+
+	dispose(): void {
+		this.close();
+		this.clearHighlights();
+		if (this.#bar) {
+			this.#bar.remove();
+			this.#bar = null;
+		}
+		this.#input = null;
+		this.#count = null;
 	}
 
 	#shouldRestoreHighlights(): boolean {

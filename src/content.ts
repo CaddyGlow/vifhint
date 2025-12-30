@@ -8,7 +8,7 @@ import { KeyBindings } from './keybindings';
 import { PluginHost } from './plugins/host';
 import { pluginRegistry } from './plugins/registry';
 import type { KeymapContribution, UiApi } from './plugins/types';
-import { type SiteDisableState, getSiteDisableState } from './site-disable';
+import { type SiteDisableState, getGlobalEnabled, getSiteDisableState } from './site-disable';
 import type { HintMode } from './types';
 
 type CommandExecutor = {
@@ -66,11 +66,11 @@ function createUi(): UiApi {
 }
 
 type Runtime = {
-	applyDisableState(state: SiteDisableState): void;
+	dispose(): void;
 };
 
-function createRuntime(initialState: SiteDisableState): Runtime {
-	let extensionEnabled = initialState === 'enabled';
+function createRuntime(): Runtime {
+	let extensionEnabled = true;
 
 	const isEnabled = (): boolean => extensionEnabled;
 
@@ -140,54 +140,74 @@ function createRuntime(initialState: SiteDisableState): Runtime {
 		helpOverlay.setBindings(keyBindings.getBindings());
 	});
 
-	const applyDisableState = (state: SiteDisableState): void => {
-		const enabled = state === 'enabled';
-		extensionEnabled = enabled;
-		if (!enabled) {
-			linkHints.deactivate();
-			searchController.close();
-			searchController.clearHighlights();
-			helpOverlay.hide();
-		}
-	};
-
-	applyDisableState(initialState);
-
 	void pluginHost.activateStartup({ url: window.location.href, host: window.location.host });
 	pluginHost.emit('page:ready', undefined);
 
-	return { applyDisableState };
+	const dispose = (): void => {
+		extensionEnabled = false;
+		linkHints.deactivate();
+		searchController.close();
+		searchController.clearHighlights();
+		helpOverlay.hide();
+		keyBindings.dispose();
+		linkHints.dispose();
+		incrementalSelection.dispose();
+		helpOverlay.dispose();
+		searchController.dispose();
+		pluginHost?.dispose();
+		delete document.documentElement.dataset.hintColorsheme;
+	};
+
+	return { dispose };
 }
 
 void (async () => {
 	const host = window.location.hostname;
 	let runtime: Runtime | null = null;
+	let globalEnabled = true;
+	let siteState: SiteDisableState = 'enabled';
 
-	const ensureRuntime = (state: SiteDisableState): Runtime => {
-		if (!runtime) runtime = createRuntime(state);
+	const ensureRuntime = (): Runtime => {
+		if (!runtime) runtime = createRuntime();
 		return runtime;
 	};
 
-	const applyDisableState = (state: SiteDisableState): void => {
-		if (state === 'enabled') {
-			ensureRuntime(state).applyDisableState(state);
+	const updateRuntime = (): void => {
+		const shouldEnable = globalEnabled && siteState === 'enabled';
+		if (shouldEnable) {
+			ensureRuntime();
 		} else if (runtime) {
-			runtime.applyDisableState(state);
+			runtime.dispose();
+			runtime = null;
 		}
 	};
 
-	const initialState = await getSiteDisableState(host);
-	applyDisableState(initialState);
+	const [initialGlobal, initialSite] = await Promise.all([
+		getGlobalEnabled(),
+		getSiteDisableState(host),
+	]);
+	globalEnabled = initialGlobal;
+	siteState = initialSite;
+	updateRuntime();
 
 	chrome.runtime.onMessage.addListener((message) => {
-		if (!message || message.type !== 'hint:site-state') return;
-		if (typeof message.host === 'string' && message.host !== host) return;
-		if (
-			message.state === 'enabled' ||
-			message.state === 'temporary' ||
-			message.state === 'permanent'
-		) {
-			applyDisableState(message.state);
+		if (!message || typeof message !== 'object') return;
+		if (message.type === 'hint:site-state') {
+			if (typeof message.host === 'string' && message.host !== host) return;
+			if (
+				message.state === 'enabled' ||
+				message.state === 'temporary' ||
+				message.state === 'permanent'
+			) {
+				siteState = message.state;
+				updateRuntime();
+			}
+			return;
+		}
+		if (message.type === 'hint:global-state') {
+			if (typeof message.enabled !== 'boolean') return;
+			globalEnabled = message.enabled;
+			updateRuntime();
 		}
 	});
 })();
