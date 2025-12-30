@@ -1,5 +1,11 @@
 import type { PluginManifest } from '../types';
 
+declare global {
+	interface HintPluginConfigRegistry {
+		'hint.whichKey': { delay?: number };
+	}
+}
+
 export const manifest = {
 	id: 'hint.whichKey',
 	name: 'Which Key',

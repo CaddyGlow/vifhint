@@ -40,13 +40,6 @@ function createUi(): UiApi {
 		if (container?.isConnected) return container;
 		container = document.createElement('div');
 		container.className = 'hint-plugin-toast-host';
-		container.style.position = 'fixed';
-		container.style.bottom = '16px';
-		container.style.right = '16px';
-		container.style.display = 'flex';
-		container.style.flexDirection = 'column';
-		container.style.gap = '8px';
-		container.style.zIndex = '2147483647';
 		document.body.appendChild(container);
 		return container;
 	};
@@ -55,14 +48,8 @@ function createUi(): UiApi {
 		toast: (message, options = {}) => {
 			const host = ensureContainer();
 			const toast = document.createElement('div');
+			toast.className = 'hint-plugin-toast';
 			toast.textContent = message;
-			toast.style.background = 'rgba(20, 20, 20, 0.9)';
-			toast.style.color = '#fff';
-			toast.style.padding = '8px 12px';
-			toast.style.borderRadius = '6px';
-			toast.style.fontSize = '12px';
-			toast.style.fontFamily = 'ui-sans-serif, system-ui, -apple-system, sans-serif';
-			toast.style.boxShadow = '0 6px 18px rgba(0, 0, 0, 0.2)';
 			host.appendChild(toast);
 
 			const duration = Math.max(1000, options.duration ?? 2000);
@@ -78,6 +65,7 @@ function createUi(): UiApi {
 }
 
 setupNoAutofocus();
+document.documentElement.dataset.hintColorsheme = appConfig.options.colorsheme;
 const ui = createUi();
 let pluginHost: PluginHost | null = null;
 const linkHints = new LinkHints({

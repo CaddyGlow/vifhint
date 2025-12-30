@@ -64,7 +64,7 @@ class KeySequenceHandler {
 	handleKey(token: KeyToken): {
 		result: 'match' | 'partial' | 'none';
 		binding?: NormalizedKeymap;
-		sequence: readonly KeyToken[];
+		tokens: readonly KeyToken[];
 	} {
 		this.#clearTimeout();
 		this.#buffer.push(token);
@@ -78,7 +78,7 @@ class KeySequenceHandler {
 
 			if (!singleNode) {
 				this.#buffer = [];
-				return { result: 'none', sequence: [] };
+				return { result: 'none', tokens: [] };
 			}
 
 			if (singleNode.binding) {
@@ -86,22 +86,22 @@ class KeySequenceHandler {
 				return {
 					result: 'match',
 					binding: singleNode.binding,
-					sequence: singleNode.binding.sequence,
+					tokens: singleNode.binding.sequence,
 				};
 			}
 
 			this.#startTimeout();
-			return { result: 'partial', sequence: [...this.#buffer] };
+			return { result: 'partial', tokens: [...this.#buffer] };
 		}
 
 		if (node.binding) {
 			this.#buffer = [];
-			return { result: 'match', binding: node.binding, sequence: node.binding.sequence };
+			return { result: 'match', binding: node.binding, tokens: node.binding.sequence };
 		}
 
 		// Partial match - wait for more keys
 		this.#startTimeout();
-		return { result: 'partial', sequence: [...this.#buffer] };
+		return { result: 'partial', tokens: [...this.#buffer] };
 	}
 
 	reset(): void {
@@ -325,13 +325,13 @@ export class KeyBindings {
 					this.#onKeySequence?.({
 						status: 'match',
 						sequence: result.binding.lhs,
-						tokens: result.sequence,
+						tokens: result.tokens,
 					});
 					this.#executeOperation(result.binding.rhs, effectiveCount, effectiveHasCount);
 				} else if (result.result === 'partial') {
 					e.preventDefault();
 					e.stopPropagation();
-					this.#onKeySequence?.({ status: 'partial', tokens: result.sequence });
+					this.#onKeySequence?.({ status: 'partial', tokens: result.tokens });
 				} else {
 					// No match; drop any pending count so it doesn't leak to later commands.
 					this.#resetCount();

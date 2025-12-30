@@ -1,3 +1,4 @@
+import { appConfig } from './config';
 import { getBottomBar, isEditable } from './content-dom';
 
 export class IncrementalSelection {
@@ -1367,6 +1368,12 @@ export class IncrementalSelection {
 		if (!this.#caret) {
 			const caret = document.createElement('div');
 			caret.className = 'hint-caret';
+			if (appConfig.options.caret.shape === 'block') {
+				caret.classList.add('is-block');
+			}
+			if (appConfig.options.caret.blink === 'blink') {
+				caret.classList.add('is-blink');
+			}
 			caret.setAttribute('aria-hidden', 'true');
 			const host = document.body ?? document.documentElement;
 			host.appendChild(caret);

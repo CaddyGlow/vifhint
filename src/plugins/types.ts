@@ -1,4 +1,4 @@
-import type { CommandId } from '../config';
+import type { AppConfig, CommandId } from '../config';
 import type { KeyToken } from '../key-notation';
 import type { HintMode } from '../types';
 
@@ -163,6 +163,8 @@ export type PluginContextBase = {
 	getKeymaps(): KeymapContribution[];
 	getOption<T>(key: string, fallback: T): T;
 	setOption<T>(key: string, value: T): void;
+	getConfig(): AppConfig;
+	getPluginConfig(): Record<string, unknown>;
 	storage: StorageApi;
 	ui: UiApi;
 	log(message: string, data?: unknown): void;

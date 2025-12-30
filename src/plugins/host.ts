@@ -350,6 +350,8 @@ export class PluginHost {
 			getKeymaps: () => this.getKeymaps(),
 			getOption: <T>(key: string, fallback: T): T => this.#getOption(pluginId, key, fallback),
 			setOption: <T>(key: string, value: T): void => this.#setOption(pluginId, key, value),
+			getConfig: () => this.#getConfig(pluginId),
+			getPluginConfig: () => this.#getPluginConfig(pluginId),
 			storage: this.#storageApi(),
 			ui: this.#ui,
 			log: (message: string, data?: unknown) => this.#log(`[plugin:${pluginId}] ${message}`, data),
@@ -422,7 +424,7 @@ export class PluginHost {
 			return overrides.get(key) as T;
 		}
 		const configEntry = appConfig.plugins?.[pluginId];
-		const optionValue = configEntry?.options?.[key];
+		const optionValue = configEntry?.config?.[key] ?? configEntry?.options?.[key];
 		if (optionValue !== undefined) {
 			return optionValue as T;
 		}
@@ -436,6 +438,42 @@ export class PluginHost {
 			this.#runtimeOptions.set(pluginId, overrides);
 		}
 		overrides.set(key, value);
+	}
+
+	#getConfig(pluginId: string): typeof appConfig {
+		const configEntry = appConfig.plugins?.[pluginId];
+		const overrides = this.#runtimeOptions.get(pluginId);
+		if (!configEntry && !overrides) return appConfig;
+
+		const mergedPluginConfig = this.#getPluginConfig(pluginId);
+
+		const plugins = {
+			...(appConfig.plugins ?? {}),
+			[pluginId]: {
+				...configEntry,
+				config: mergedPluginConfig,
+			},
+		};
+
+		return {
+			...appConfig,
+			plugins,
+		};
+	}
+
+	#getPluginConfig(pluginId: string): Record<string, unknown> {
+		const configEntry = appConfig.plugins?.[pluginId];
+		const basePluginConfig = (configEntry?.config ?? configEntry?.options ?? {}) as Record<
+			string,
+			unknown
+		>;
+		const overrides = this.#runtimeOptions.get(pluginId);
+		if (!overrides) return { ...basePluginConfig };
+		const merged: Record<string, unknown> = { ...basePluginConfig };
+		for (const [key, value] of overrides) {
+			merged[key] = value;
+		}
+		return merged;
 	}
 }
 

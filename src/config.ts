@@ -56,19 +56,34 @@ export type Keymap = {
 type Options = {
 	readonly leader: string;
 	readonly timeoutlen: number;
-	readonly whichkeyDelay: number;
 	readonly noautofocus: boolean;
 	readonly findmode: 'custom' | 'native';
 	readonly scroll: number;
+	readonly colorsheme: ColorshemeName;
+	readonly caret: CaretOptions;
 };
 
-type AppConfig = {
+type ColorshemeName = 'base16-vif-dark' | 'base16-vif-light';
+
+type CaretOptions = {
+	readonly shape: 'block';
+	readonly blink: 'steady' | 'blink';
+};
+
+export type AppConfig<PluginConfigs extends object = HintPluginConfigRegistry> = {
 	readonly keymaps: readonly Keymap[];
 	readonly options: Options;
 	readonly plugins?: Record<
 		string,
 		{ enabled?: boolean; config?: Record<string, unknown>; options?: Record<string, unknown> }
-	>;
+	> &
+		Partial<{
+			[K in keyof PluginConfigs]: {
+				enabled?: boolean;
+				config?: PluginConfigs[K];
+				options?: Record<string, unknown>;
+			};
+		}>;
 };
 
 export const appConfig: AppConfig = {
@@ -158,13 +173,26 @@ export const appConfig: AppConfig = {
 	options: {
 		leader: ' ',
 		timeoutlen: 10000, // ms to wait for next key in sequence
-		whichkeyDelay: 100, // ms to wait before showing prefix hints
 		// Prevent autofocus from stealing keyboard input on page load.
 		noautofocus: true,
 		// 'native' uses the browser find UI when supported; 'custom' logs not implemented.
 		findmode: 'custom',
 		// Scroll amount as a fraction of the viewport height (e.g. 0.5 = half page).
 		scroll: 0.5,
+		// Base16 palette used by hints.css.
+		colorsheme: 'base16-vif-dark',
+		// Vim-style caret options.
+		caret: {
+			shape: 'block',
+			blink: 'steady',
+		},
 	},
-	plugins: {},
+	plugins: {
+		'hint.whichKey': {
+			enabled: true,
+			config: {
+				delay: 200,
+			},
+		},
+	},
 };

@@ -1,6 +1,7 @@
-import { appConfig } from '../../config';
+import type { Keymap } from '../../config';
 import { type KeyToken, formatKeyTokenForDisplay, parseKeySequence } from '../../key-notation';
 import type { KeySequenceEvent, KeymapContribution, PluginContext } from '../types';
+import { manifest } from './manifest';
 
 type Binding = {
 	lhs: string;
@@ -38,10 +39,12 @@ function buildTrie(bindings: readonly Binding[]): TrieNode {
 	return root;
 }
 
-function collectBindings(ctx: PluginContext): Binding[] {
-	const leader = appConfig.options.leader;
-
-	const coreBindings: Binding[] = appConfig.keymaps.map((binding) => ({
+function collectBindings(
+	ctx: PluginContext,
+	leader: string,
+	bindings: readonly Keymap[],
+): Binding[] {
+	const coreBindings: Binding[] = bindings.map((binding) => ({
 		lhs: binding.lhs,
 		desc: binding.desc,
 		tokens: parseKeySequence(binding.lhs, leader),
@@ -162,10 +165,13 @@ class WhichKeyOverlay {
 export const activateContent = (ctx: PluginContext) => {
 	if (ctx.context !== 'content') return;
 
+	const fullConfig = ctx.getConfig();
+	const pluginConfig = ctx.getPluginConfig();
+	const leader = fullConfig.options.leader;
 	const overlay = new WhichKeyOverlay();
-	const trie = buildTrie(collectBindings(ctx));
-	const delay = Math.max(0, appConfig.options.whichkeyDelay);
-	const timeout = Math.max(0, appConfig.options.timeoutlen);
+	const trie = buildTrie(collectBindings(ctx, leader, fullConfig.keymaps));
+	const delay = Math.max(0, typeof pluginConfig.delay === 'number' ? pluginConfig.delay : 100);
+	const timeout = Math.max(0, fullConfig.options.timeoutlen);
 	let showTimer: number | null = null;
 	let hideTimer: number | null = null;
 	let pending: readonly KeyToken[] | null = null;

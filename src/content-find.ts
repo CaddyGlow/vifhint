@@ -613,6 +613,10 @@ export class CustomFindController {
 	}
 
 	#moveCaretToCurrentMatch(): void {
+		if (this.#input && document.activeElement === this.#input) {
+			return;
+		}
+
 		const selection = window.getSelection();
 		if (!selection) return;
 
