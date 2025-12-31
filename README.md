@@ -27,6 +27,30 @@ bun run build
    - Click "Load unpacked"
    - Select the `dist` folder
 
+### Internal install (from GitHub release)
+
+For internal distribution without building locally, you can download the latest
+release zip and extract it to a stable user folder, then load it as unpacked.
+
+```bash
+bun run install:unpacked
+```
+
+Or run the script directly:
+
+```bash
+curl -sL https://raw.githubusercontent.com/caddyglow/vifhint/main/scripts/install-unpacked.sh | bash
+```
+
+PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/caddyglow/vifhint/main/scripts/install-unpacked.ps1 | iex
+```
+
+After updates, re-run the command and click "Reload" in `chrome://extensions`.
+See `docs/internal-install.md` for details.
+
 ## Usage
 
 1. Press `Alt+F` (or your configured shortcut) to activate link hints

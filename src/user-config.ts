@@ -1,5 +1,10 @@
-import { type AppConfig, type Keymap, appConfig } from './config';
-import { type HintConfig, defaultHintConfig } from './hint-config';
+import {
+	type AppConfig,
+	type HintConfig,
+	type Keymap,
+	appConfig,
+	defaultHintConfig,
+} from './config';
 
 export type KeymapMode = 'merge' | 'replace';
 
@@ -15,6 +20,7 @@ export type ResolvedConfig = AppConfig & { hints: HintConfig };
 
 const USER_CONFIG_KEY = 'hint.userConfig';
 let cachedBundledConfig: UserConfig | null | undefined;
+type StorageGetResult = Record<string, unknown>;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
 	return Boolean(value && typeof value === 'object' && !Array.isArray(value));
@@ -51,9 +57,15 @@ async function loadBundledConfig(): Promise<UserConfig | null> {
 
 async function loadStoredConfig(): Promise<UserConfig | null> {
 	if (typeof chrome === 'undefined' || !chrome.storage?.local) return null;
+	const getStorageConfig = async (
+		area: chrome.storage.StorageArea | undefined,
+	): Promise<StorageGetResult> => {
+		if (!area?.get) return {};
+		return (await area.get(USER_CONFIG_KEY)) as StorageGetResult;
+	};
 	const [localResult, syncResult] = await Promise.all([
-		chrome.storage.local.get(USER_CONFIG_KEY),
-		chrome.storage.sync?.get ? chrome.storage.sync.get(USER_CONFIG_KEY) : Promise.resolve({}),
+		getStorageConfig(chrome.storage.local),
+		getStorageConfig(chrome.storage.sync),
 	]);
 	const localValue = Object.prototype.hasOwnProperty.call(localResult, USER_CONFIG_KEY)
 		? normalizeUserConfig(localResult[USER_CONFIG_KEY])

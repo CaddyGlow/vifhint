@@ -1,5 +1,5 @@
+import { type HintConfig, defaultHintConfig } from './config';
 import { isEditable } from './content-dom';
-import { type HintConfig, defaultHintConfig } from './hint-config';
 import type { HintMode } from './types';
 
 interface ElementData {

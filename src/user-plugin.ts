@@ -1,8 +1,9 @@
-import type { PluginModule } from './plugins/types';
+import type { PluginEntry, PluginModule } from './plugins/types';
 
+const NOOP_ENTRY: PluginEntry = () => undefined;
 const NOOP_MODULE: PluginModule = {
-	activateBackground: () => {},
-	activateContent: () => {},
+	activateBackground: NOOP_ENTRY,
+	activateContent: NOOP_ENTRY,
 };
 
 function coerceModule(module: unknown): PluginModule {

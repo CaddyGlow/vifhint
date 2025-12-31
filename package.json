@@ -12,6 +12,7 @@
 		"version:inject:firefox": "V=$(git describe --tags 2>/dev/null | sed 's/^v//') && [ -n \"$V\" ] && sed -i \"s/\\\"version\\\": \\\"[^\\\"]*\\\"/\\\"version\\\": \\\"$V\\\"/\" dist-firefox/manifest.json || echo 'No git tag found, using default version'",
 		"release": "bun run build:release && bun run version:inject && (cd dist && rm -f *.map && V=$(git describe --tags 2>/dev/null | sed 's/^v//') && zip -r ../vifhint-${V:-0.0.0}.zip .)",
 		"release:firefox": "bun run build:firefox:release && bun run version:inject:firefox && (cd dist-firefox && rm -f *.map && V=$(git describe --tags 2>/dev/null | sed 's/^v//') && zip -r ../vifhint-firefox-${V:-0.0.0}.zip .)",
+		"install:unpacked": "bun scripts/install-unpacked.ts",
 		"icons:generate": "bash scripts/generate-icons.sh",
 		"hooks:install": "git config core.hooksPath .githooks",
 		"format": "biome format --write .",

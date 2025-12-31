@@ -28,14 +28,6 @@ const PLUGINS: PluginSpec[] = [
 \t\t\tcontent: () => import('./which-key/content'),
 \t\t}`,
 	},
-	{
-		id: 'hint.incrementalSelection',
-		manifestImport: './incremental-selection/manifest',
-		manifestName: 'incrementalSelectionManifest',
-		load: `{
-\t\t\tcontent: () => import('./incremental-selection/content'),
-\t\t}`,
-	},
 ];
 
 const parseList = (value?: string): string[] =>
