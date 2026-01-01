@@ -6,7 +6,6 @@ interface ElementData {
 	readonly element: HTMLElement;
 	readonly rect: DOMRect;
 	readonly style: CSSStyleDeclaration;
-	readonly isInShadowDom?: boolean;
 }
 
 interface HintElement {
@@ -27,9 +26,20 @@ type LinkHintsOptions = {
 	readonly isEnabled?: () => boolean;
 };
 
-const CLICKABLE_TAGS = new Set(['A', 'BUTTON', 'SELECT', 'INPUT']);
+const CLICKABLE_TAGS = new Set(['A', 'BUTTON', 'SELECT', 'INPUT', 'TEXTAREA', 'SUMMARY']);
 
-const CLICKABLE_ROLES = new Set(['button']);
+const CLICKABLE_ROLES = new Set([
+	'button',
+	'link',
+	'menuitem',
+	'option',
+	'switch',
+	'tab',
+	'checkbox',
+	'combobox',
+	'menuitemcheckbox',
+	'menuitemradio',
+]);
 
 function findHoverElements(): Set<Element> {
 	const selectors = new Set<string>();
@@ -60,99 +70,95 @@ function findHoverElements(): Set<Element> {
 	}
 }
 
-function isClickable(el: HTMLElement): 'tag' | 'handler' | 'cursor' | 'subcursor' | null {
-	if (el.onclick || el.getAttribute('onclick')) return 'handler';
-
+function isClickable(
+	el: HTMLElement,
+	hoverElements: Set<Element>,
+): 'tag' | 'handler' | 'cursor' | 'hover' | null {
 	if (CLICKABLE_TAGS.has(el.tagName)) {
-		if (el.tagName === 'INPUT') {
-			const type = (el as HTMLInputElement).type;
-			if (type !== 'button' && type !== 'submit') return null;
-		}
+		if (el.tagName === 'A' && !(el as HTMLAnchorElement).href && !el.onclick) return null;
 		return 'tag';
 	}
 
 	const role = el.getAttribute('role');
 	if (role && CLICKABLE_ROLES.has(role)) return 'tag';
 
+	if (el.onclick || el.getAttribute('onclick')) return 'handler';
+
+	if (el.contentEditable === 'true') return 'tag';
+
+	if (hoverElements.has(el)) return 'hover';
+
 	const cursor = getComputedStyle(el).cursor;
-	if (cursor === 'pointer') {
-		const parent = el.parentElement;
-		if (parent && getComputedStyle(parent).cursor === 'pointer') return 'subcursor';
-		return 'cursor';
-	}
+	if (cursor === 'pointer' || cursor.startsWith('url(')) return 'cursor';
 
 	return null;
 }
 
-function isInputElement(el: HTMLElement): boolean {
-	return (
-		el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.hasAttribute('contenteditable')
-	);
-}
-
-function isFrameElement(el: HTMLElement): boolean {
-	return el.tagName === 'IFRAME';
-}
-
-function isHiddenByStyles(el: HTMLElement): boolean {
-	const style = getComputedStyle(el);
-
-	if (style.visibility === 'hidden' || style.visibility === 'collapse') return true;
-	if (style.display === 'none') return true;
-	if (style.contentVisibility === 'hidden') return true;
-	if (Number.parseFloat(style.opacity) < 0.1) return true;
-
-	const clip = style.clip;
-	if (clip === 'rect(0px, 0px, 0px, 0px)' || clip === 'rect(1px, 1px, 1px, 1px)') {
+function isHardClickable(el: HTMLElement): boolean {
+	if (CLICKABLE_TAGS.has(el.tagName)) {
+		if (el.tagName === 'A') {
+			const anchor = el as HTMLAnchorElement;
+			if (!anchor.href && !el.onclick && !el.getAttribute('onclick')) return false;
+		}
+		if (el.tagName === 'INPUT') {
+			const type = (el as HTMLInputElement).type;
+			if (/^(hidden)$/i.test(type)) return false;
+		}
 		return true;
 	}
 
-	const parent = el.parentElement;
-	if (!parent || parent === document.body) return false;
-	return isHiddenByStyles(parent);
+	const role = el.getAttribute('role');
+	if (role && CLICKABLE_ROLES.has(role)) return true;
+
+	if (el.onclick || el.getAttribute('onclick')) return true;
+
+	if (el.contentEditable === 'true') return true;
+
+	return false;
 }
 
-function isVisible(el: HTMLElement, rect: DOMRect): boolean {
-	if (!el.isConnected) return false;
-
-	if (rect.width <= 5 || rect.height <= 5) return false;
-	if (rect.right <= 0) return false;
-	if (rect.left >= document.documentElement.scrollWidth) return false;
-
-	if (isHiddenByStyles(el)) return false;
-	if (isHiddenByOverflow(el, rect)) return false;
-
-	return true;
+function hasHardClickableAncestor(el: HTMLElement): boolean {
+	let parent = el.parentElement;
+	while (parent && parent !== document.body && parent !== document.documentElement) {
+		if (isHardClickable(parent)) return true;
+		parent = parent.parentElement;
+	}
+	return false;
 }
 
-function getElementData(el: HTMLElement): ElementData | null {
+function getElementData(
+	el: HTMLElement,
+	viewportWidth: number,
+	viewportHeight: number,
+): ElementData | null {
+	if (!el.offsetWidth || !el.offsetHeight) return null;
+
 	const rect = el.getBoundingClientRect();
-	if (!isVisible(el, rect)) return null;
+
+	if (
+		rect.bottom <= 0 ||
+		rect.top >= viewportHeight ||
+		rect.right <= 0 ||
+		rect.left >= viewportWidth
+	)
+		return null;
+
+	const minSize = isEditable(el) ? 1 : 4;
+	if (rect.width <= minSize || rect.height <= minSize) return null;
+
 	const style = getComputedStyle(el);
+
+	if (style.visibility === 'hidden' || style.display === 'none') return null;
+
+	const opacity = Number.parseFloat(style.opacity);
+	if (opacity <= 0.1 && !(el.tagName === 'INPUT' && (el as HTMLInputElement).type !== 'text')) {
+		return null;
+	}
 
 	return { element: el, rect, style };
 }
 
-function isHiddenByOverflow(el: HTMLElement, rect: DOMRect): boolean {
-	const style = getComputedStyle(el);
-	if (style.position === 'fixed' || style.position === 'sticky') return false;
-
-	const parent = el.parentElement;
-	if (!parent) return false;
-
-	const parentStyle = getComputedStyle(parent);
-	if (parentStyle.overflow !== 'hidden') return false;
-
-	const parentRect = parent.getBoundingClientRect();
-	return (
-		rect.bottom < parentRect.top + 3 ||
-		rect.top > parentRect.bottom - 3 ||
-		rect.right < parentRect.left + 3 ||
-		rect.left > parentRect.right - 3
-	);
-}
-
-function hasSimilarBounds(a: DOMRect, b: DOMRect, threshold = 12): boolean {
+function hasSimilarBounds(a: DOMRect, b: DOMRect, threshold = 30): boolean {
 	return (
 		Math.abs(a.left - b.left) < threshold &&
 		Math.abs(a.top - b.top) < threshold &&
@@ -161,8 +167,19 @@ function hasSimilarBounds(a: DOMRect, b: DOMRect, threshold = 12): boolean {
 	);
 }
 
+function getElementHref(el: HTMLElement): string | null {
+	if (el.tagName === 'A') return (el as HTMLAnchorElement).href || null;
+	return el.closest('a')?.href || null;
+}
+
 function shouldDedupeInline(lastData: ElementData, newData: ElementData): boolean {
-	return hasSimilarBounds(lastData.rect, newData.rect);
+	if (hasSimilarBounds(lastData.rect, newData.rect)) return true;
+
+	const lastHref = getElementHref(lastData.element);
+	const newHref = getElementHref(newData.element);
+	if (!lastHref || !newHref || lastHref === newHref) return true;
+
+	return false;
 }
 
 function normalizeSearchToken(token: string | null | undefined): string | null {
@@ -208,7 +225,7 @@ function isAccessible(element: HTMLElement, rect: DOMRect): boolean {
 		{ x: rect.right - 8, y: rect.top + 8 },
 		{ x: rect.left + 8, y: rect.top + 8 },
 		{ x: centerX, y: centerY },
-		{ x: centerX, y: rect.bottom },
+		{ x: centerX, y: rect.bottom - 8 },
 	];
 
 	return testPoints.some(({ x, y }) => {
@@ -218,28 +235,9 @@ function isAccessible(element: HTMLElement, rect: DOMRect): boolean {
 	});
 }
 
-function getViewport(): { width: number; height: number } {
-	return {
-		width: document.documentElement.clientWidth,
-		height: document.documentElement.clientHeight,
-	};
-}
-
-function isInViewportRect(rect: DOMRect, viewport: { width: number; height: number }): boolean {
-	return !(
-		rect.top > viewport.height ||
-		rect.bottom < 0 ||
-		rect.left > viewport.width ||
-		rect.right < 0
-	);
-}
-
 function filterOverlaps(elements: ElementData[]): ElementData[] {
 	if (elements.length <= 1) return elements;
-	const viewport = getViewport();
-	return elements.filter(({ element, rect, isInShadowDom }) => {
-		if (isInShadowDom) return true;
-		if (!isInViewportRect(rect, viewport)) return true;
+	return elements.filter(({ element, rect }) => {
 		return isAccessible(element, rect);
 	});
 }
@@ -249,67 +247,90 @@ function collectClickableElements(): ElementData[] {
 	if (!root) return [];
 
 	const results: ElementData[] = [];
-	const viewport = getViewport();
+	const viewportWidth = window.innerWidth;
+	const viewportHeight = window.innerHeight;
 	const hoverElements = findHoverElements();
 	const shadowRoots: ShadowRoot[] = [];
-	let count = 0;
 
-	const addElement = (element: HTMLElement, isInShadowDom: boolean): void => {
-		const data = getElementData(element);
-		if (!data) return;
-
-		const nextData = isInShadowDom ? { ...data, isInShadowDom } : data;
-		const last = results.at(-1);
-		if (last && last.element.contains(element) && shouldDedupeInline(last, nextData)) {
-			results.pop();
-			count = Math.max(0, count - 1);
-		}
-
-		results.push(nextData);
-		count += 1;
-	};
-
-	const walk = (walker: TreeWalker, isInShadowDom: boolean): void => {
-		let node = walker.nextNode();
-		while (node) {
+	const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, {
+		acceptNode(node) {
 			const el = node as HTMLElement;
+			if (!el.offsetWidth || !el.offsetHeight) return NodeFilter.FILTER_SKIP;
+			return NodeFilter.FILTER_ACCEPT;
+		},
+	});
 
-			if (el.shadowRoot) shadowRoots.push(el.shadowRoot);
+	let node = walker.nextNode();
+	while (node) {
+		const el = node as HTMLElement;
+		const nextNode = walker.nextNode();
 
-			if (count >= 200) return;
-			if (count >= 100) {
-				const rect = el.getBoundingClientRect();
-				if (!isInViewportRect(rect, viewport)) {
-					node = walker.nextNode();
-					continue;
+		if (el.shadowRoot) shadowRoots.push(el.shadowRoot);
+
+		const clickType = isClickable(el, hoverElements);
+		if (clickType) {
+			const hasClickableAncestor =
+				(clickType === 'cursor' || clickType === 'hover') && hasHardClickableAncestor(el);
+			if (!hasClickableAncestor) {
+				const data = getElementData(el, viewportWidth, viewportHeight);
+				if (data) {
+					const last = results.at(-1);
+					if (last) {
+						if (last.element.contains(el) && shouldDedupeInline(last, data)) {
+							if (last.element.tagName !== 'A' || !(last.element as HTMLAnchorElement).href) {
+								results[results.length - 1] = data;
+							}
+						} else {
+							results.push(data);
+						}
+					} else {
+						results.push(data);
+					}
 				}
 			}
-
-			let skipChildren = false;
-
-			if (isFrameElement(el) || isInputElement(el)) {
-				addElement(el, isInShadowDom);
-				skipChildren = true;
-			} else {
-				const clickType = hoverElements.has(el) ? 'cursor' : isClickable(el);
-				if (clickType) {
-					if (clickType !== 'subcursor') {
-						addElement(el, isInShadowDom);
-					}
-					if (clickType !== 'cursor' && clickType !== 'subcursor') {
-						skipChildren = true;
-					}
-				}
-			}
-
-			node = skipChildren ? walker.nextSibling() : walker.nextNode();
 		}
-	};
 
-	walk(document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT), false);
+		node = nextNode;
+	}
 
 	for (const shadowRoot of shadowRoots) {
-		walk(document.createTreeWalker(shadowRoot, NodeFilter.SHOW_ELEMENT), true);
+		const shadowWalker = document.createTreeWalker(shadowRoot, NodeFilter.SHOW_ELEMENT, {
+			acceptNode(node) {
+				const el = node as HTMLElement;
+				if (!el.offsetWidth || !el.offsetHeight) return NodeFilter.FILTER_SKIP;
+				return NodeFilter.FILTER_ACCEPT;
+			},
+		});
+
+		let shadowNode = shadowWalker.nextNode();
+		while (shadowNode) {
+			const el = shadowNode as HTMLElement;
+			const nextShadowNode = shadowWalker.nextNode();
+			const clickType = isClickable(el, hoverElements);
+			if (clickType) {
+				const hasClickableAncestor =
+					(clickType === 'cursor' || clickType === 'hover') && hasHardClickableAncestor(el);
+				if (!hasClickableAncestor) {
+					const data = getElementData(el, viewportWidth, viewportHeight);
+					if (data) {
+						const last = results.at(-1);
+						if (last) {
+							if (last.element.contains(el) && shouldDedupeInline(last, data)) {
+								if (last.element.tagName !== 'A' || !(last.element as HTMLAnchorElement).href) {
+									results[results.length - 1] = data;
+								}
+							} else {
+								results.push(data);
+							}
+						} else {
+							results.push(data);
+						}
+					}
+				}
+			}
+
+			shadowNode = nextShadowNode;
+		}
 	}
 
 	return filterOverlaps(results);
