@@ -8,7 +8,7 @@
 	--hint-base05: #c9c2ae;
 	--hint-base06: #e8e2d1;
 	--hint-base07: #f4f1e5;
-	--hint-base08: #cc0000;
+	--hint-base08: #ff5500;
 	--hint-base09: #ff9f1c;
 	--hint-base0a: #ffdd00;
 	--hint-base0b: #00d4ff;
@@ -32,7 +32,7 @@
 	--hint-base05: #2f3a4e;
 	--hint-base06: #141924;
 	--hint-base07: #0f1218;
-	--hint-base08: #cc0000;
+	--hint-base08: #ff5500;
 	--hint-base09: #ff9f1c;
 	--hint-base0a: #d9b400;
 	--hint-base0b: #00b3d9;
@@ -71,20 +71,20 @@
 	position: absolute;
 	z-index: 2147483647;
 	padding: 1px 3px;
-	background: var(--hint-base0a);
-	color: var(--hint-base00);
-	font-family: monospace;
-	font-size: 11px;
-	font-weight: bold;
-	border: 1px solid var(--hint-base00);
+	background: var(--hint-base0f);
+	color: #fff;
+	font-family: Verdana, Arial, sans-serif;
+	font-size: 13px;
+	font-weight: 700;
+	border: 0;
 	border-radius: 2px;
-	box-shadow: 0 1px 2px rgba(var(--hint-base00-rgb), 0.3);
+	box-shadow: none;
 	pointer-events: none;
-	line-height: 1;
+	line-height: 1.2;
 }
 
 .link-hint-label .matched {
-	color: var(--hint-base08);
+	color: #fff;
 }
 
 .link-hint-input {
@@ -112,14 +112,13 @@
 .link-hint-target {
 	outline: 2px dashed var(--hint-base0f) !important;
 	outline-offset: -2px !important;
-	box-shadow: inset 0 0 0 2px rgba(var(--hint-base0f-rgb), 0.3) !important;
+	transition: none !important;
 }
 
 .link-hint-target-input {
-	outline: 2px solid var(--hint-base0b) !important;
+	outline: 2px dashed var(--hint-base0f) !important;
 	outline-offset: -2px !important;
-	box-shadow: inset 0 0 0 2px rgba(var(--hint-base0b-rgb), 0.35), 0 0 8px
-		rgba(var(--hint-base0b-rgb), 0.6) !important;
+	transition: none !important;
 }
 
 .hint-caret {
