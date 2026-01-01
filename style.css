@@ -83,6 +83,10 @@
 	line-height: 1.2;
 }
 
+.link-hint-label.is-top {
+	background: var(--hint-base08);
+}
+
 .link-hint-label .matched {
 	color: #fff;
 }
@@ -119,6 +123,22 @@
 	outline: 2px dashed var(--hint-base0f) !important;
 	outline-offset: -2px !important;
 	transition: none !important;
+}
+
+.link-hint-target-top {
+	outline: 4px solid var(--hint-base08) !important;
+	outline-offset: -4px !important;
+}
+
+.link-hint-text-match {
+	background: var(--hint-base0f);
+	color: #fff;
+	padding: 0 2px;
+	border-radius: 2px;
+}
+
+.link-hint-text-top {
+	background: var(--hint-base08);
 }
 
 .hint-caret {

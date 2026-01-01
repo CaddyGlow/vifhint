@@ -84,7 +84,7 @@ export type HintConfig = {
 
 export const defaultHintConfig: HintConfig = {
 	hintChars: 'asdfghjkl',
-	hintAlign: 'left',
+	hintAlign: 'right',
 	hintOffset: { x: -8, y: -10 },
 	clickableSelector: '',
 	showElementBorder: true,
