@@ -16,23 +16,32 @@ const PLUGINS: PluginSpec[] = [
 		manifestName: 'userManifest',
 		loadImports: [{ name: 'loadUserPluginModule', from: '../user-plugin' }],
 		load: `{
-\t\t\tcontent: () => loadUserPluginModule(),
-\t\t\tbackground: () => loadUserPluginModule(),
-\t\t}`,
+			content: () => loadUserPluginModule(),
+			background: () => loadUserPluginModule(),
+		}`,
 	},
 	{
 		id: 'hint.whichKey',
 		manifestImport: './which-key/manifest',
 		manifestName: 'whichKeyManifest',
 		load: `{
-\t\t\tcontent: () => import('./which-key/content'),
-\t\t}`,
+			content: () => import('./which-key/content'),
+		}`,
+	},
+	{
+		id: 'hint.windowMover',
+		manifestImport: './window-mover/manifest',
+		manifestName: 'windowMoverManifest',
+		load: `{
+			content: () => import('./window-mover/content'),
+			background: () => import('./window-mover/background'),
+		}`,
 	},
 ];
 
 const parseList = (value?: string): string[] =>
 	(value ?? '')
-		.split(/[,\s]+/)
+		.split(/[\s,]+/)
 		.map((entry) => entry.trim())
 		.filter(Boolean);
 
