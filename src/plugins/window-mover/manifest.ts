@@ -14,9 +14,7 @@ export const manifest = {
 	contexts: ['content', 'background'],
 	activation: [{ type: 'onStartup' }],
 	contributes: {
-		commands: [
-			{ id: 'window.moveTab', title: 'Move current tab to window' },
-		],
+		commands: [{ id: 'window.moveTab', title: 'Move current tab to window' }],
 		keymaps: [
 			{
 				lhs: '<leader>w',

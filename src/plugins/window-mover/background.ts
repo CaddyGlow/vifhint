@@ -2,7 +2,11 @@ import type { PluginContext } from '../types';
 import { manifest } from './manifest';
 
 type WindowListPayload = {
-	readonly windows: Array<{ id: number; tabs: Array<{ title: string; url: string }>; isPreviousChoice?: boolean }>;
+	readonly windows: Array<{
+		id: number;
+		tabs: Array<{ title: string; url: string }>;
+		isPreviousChoice?: boolean;
+	}>;
 };
 
 type MoveMessage = { type: 'window-mover:move'; windowId: number };
@@ -21,8 +25,7 @@ export const activateBackground = (ctx: PluginContext) => {
 			.filter((w) => w.id !== undefined && w.id !== currentWindowId)
 			.map((w) => ({
 				id: w.id as number,
-				tabs:
-					w.tabs?.map((t) => ({ title: t.title ?? '(untitled)', url: t.url ?? '' })) ?? [],
+				tabs: w.tabs?.map((t) => ({ title: t.title ?? '(untitled)', url: t.url ?? '' })) ?? [],
 				isPreviousChoice: previousChoice !== null && w.id === previousChoice,
 			}))
 			.sort((a, b) => a.id - b.id);
@@ -30,7 +33,10 @@ export const activateBackground = (ctx: PluginContext) => {
 		return { windows: others };
 	};
 
-	const handleMove = async (sender: chrome.runtime.MessageSender, windowId: number): Promise<void> => {
+	const handleMove = async (
+		sender: chrome.runtime.MessageSender,
+		windowId: number,
+	): Promise<void> => {
 		const tabId = sender.tab?.id;
 		if (!tabId) return;
 
@@ -46,7 +52,11 @@ export const activateBackground = (ctx: PluginContext) => {
 		previousChoice = windowId;
 	};
 
-	const listener = (message: Message, sender: chrome.runtime.MessageSender, sendResponse: (resp?: unknown) => void) => {
+	const listener = (
+		message: Message,
+		sender: chrome.runtime.MessageSender,
+		sendResponse: (resp?: unknown) => void,
+	) => {
 		if (message?.type === 'window-mover:list') {
 			void handleList(sender)
 				.then((data) => sendResponse(data))

@@ -24,11 +24,13 @@
 		"ci": "bun run typecheck && bun run lint && bun run format:check && bun run build",
 		"fix": "biome check --write . && biome format --write . && tsc --noEmit",
 		"watch": "tsc --watch",
-		"typecheck": "bun scripts/generate-plugin-registry.ts && tsc --noEmit"
+		"typecheck": "bun scripts/generate-plugin-registry.ts && tsc --noEmit",
+		"test": "bun test"
 	},
 	"devDependencies": {
 		"@types/chrome": "^0.0.268",
 		"@biomejs/biome": "^1.8.3",
+		"happy-dom": "^15.5.1",
 		"typescript": "^5.3.3"
 	}
 }
