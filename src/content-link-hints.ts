@@ -1932,3 +1932,8 @@ export class LinkHints {
 		return null;
 	}
 }
+
+// Test-only helpers
+export const __test = {
+	collectSearchCandidates,
+};
