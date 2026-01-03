@@ -305,7 +305,7 @@
 }
 
 .hint-window-mover-row.is-prev::after {
-	content: 'recent';
+	content: "recent";
 	float: right;
 	font-size: 11px;
 	color: var(--hint-base05);

@@ -79,7 +79,7 @@ class WindowMoverOverlay {
 			tabPreviews: [],
 		});
 
-		windows.forEach((w) => {
+		for (const w of windows) {
 			this.#addItem({
 				windowId: w.id,
 				title: `Window ${w.id}`,
@@ -87,7 +87,7 @@ class WindowMoverOverlay {
 				tabPreviews: w.tabs.slice(0, 4),
 				isPreviousChoice: w.isPreviousChoice === true,
 			});
-		});
+		}
 
 		if (this.#items.length > 1) {
 			const previousIndex = this.#items.findIndex((item) => item.el.classList.contains('is-prev'));
