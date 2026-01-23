@@ -31,6 +31,12 @@
 				"default": "Alt+F"
 			},
 			"description": "Activate link hints"
+		},
+		"toggle-site": {
+			"suggested_key": {
+				"default": "Alt+P"
+			},
+			"description": "Toggle enable/disable for this site"
 		}
 	}
 }

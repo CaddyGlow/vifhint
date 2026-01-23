@@ -1,11 +1,12 @@
 // Application configuration
 
 export type CoreCommand =
-	| `tab:${'next' | 'previous' | 'close' | 'new' | 'restore'}`
+	| `tab:${'next' | 'previous' | 'close' | 'new' | 'restore' | 'first' | 'last' | 'close-left' | 'close-right' | 'close-all-left' | 'close-all-right' | 'close-others' | 'close-playing' | 'goto-playing'}`
 	| 'hints:activate'
 	| 'hints:newTab'
 	| 'hints:backgroundTab'
 	| 'hints:search'
+	| 'hints:yank'
 	| 'scroll:top'
 	| 'scroll:bottom'
 	| 'scroll:half-down'
@@ -18,6 +19,7 @@ export type CoreCommand =
 	| 'selection:line-toggle'
 	| 'selection:yank'
 	| 'selection:swap'
+	| 'mode:passthrough'
 	| 'motion:word-forward'
 	| 'motion:word-back'
 	| 'motion:word-end'
@@ -112,9 +114,18 @@ export const appConfig: AppConfig = {
 		// Tab operations
 		{ lhs: 'gt', rhs: 'tab:next', desc: 'Next tab', repeatable: true },
 		{ lhs: 'gT', rhs: 'tab:previous', desc: 'Previous tab', repeatable: true },
+		{ lhs: 'g0', rhs: 'tab:first', desc: 'Go to first tab', repeatable: false },
+		{ lhs: 'g$', rhs: 'tab:last', desc: 'Go to last tab', repeatable: false },
+		{ lhs: 'gp', rhs: 'tab:goto-playing', desc: 'Go to playing tab', repeatable: false },
 		{ lhs: 'x', rhs: 'tab:close', desc: 'Close tab', repeatable: false },
 		{ lhs: 't', rhs: 'tab:new', desc: 'New tab', repeatable: true },
 		{ lhs: 'X', rhs: 'tab:restore', desc: 'Restore closed tab', repeatable: false },
+		{ lhs: 'gxt', rhs: 'tab:close-left', desc: 'Close tab on left', repeatable: false },
+		{ lhs: 'gxT', rhs: 'tab:close-right', desc: 'Close tab on right', repeatable: false },
+		{ lhs: 'gx0', rhs: 'tab:close-all-left', desc: 'Close all tabs on left', repeatable: false },
+		{ lhs: 'gx$', rhs: 'tab:close-all-right', desc: 'Close all tabs on right', repeatable: false },
+		{ lhs: 'gxx', rhs: 'tab:close-others', desc: 'Close all other tabs', repeatable: false },
+		{ lhs: 'gxp', rhs: 'tab:close-playing', desc: 'Close playing tab', repeatable: false },
 
 		// Scroll operations
 		{ lhs: 'd', rhs: 'scroll:half-down', desc: 'Scroll page down', repeatable: true },
@@ -136,6 +147,18 @@ export const appConfig: AppConfig = {
 			lhs: '<leader> ',
 			rhs: 'hints:search',
 			desc: 'Search hint targets by text',
+			repeatable: false,
+		},
+		{
+			lhs: '<leader>p',
+			rhs: 'mode:passthrough',
+			desc: 'Passthrough keys for 5s',
+			repeatable: false,
+		},
+		{
+			lhs: '<leader>yp',
+			rhs: 'hints:yank',
+			desc: 'Yank from pre/code/input hints',
 			repeatable: false,
 		},
 
@@ -196,7 +219,7 @@ export const appConfig: AppConfig = {
 		{ lhs: '?', rhs: 'help:toggle', desc: 'Show keymaps', repeatable: false },
 	],
 	options: {
-		leader: ' ',
+		leader: ';',
 		timeoutlen: 10000, // ms to wait for next key in sequence
 		// Prevent autofocus from stealing keyboard input on page load.
 		noautofocus: true,

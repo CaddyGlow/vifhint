@@ -305,6 +305,19 @@ function isHardClickable(el: HTMLElement): boolean {
 	return false;
 }
 
+function isYankableInput(el: HTMLInputElement): boolean {
+	const type = el.type;
+	return !/^(button|checkbox|file|hidden|image|radio|reset|submit)$/i.test(type);
+}
+
+function isYankableElement(el: HTMLElement): boolean {
+	const tag = el.tagName;
+	if (tag === 'PRE' || tag === 'TEXTAREA') return true;
+	if (tag === 'CODE') return !el.closest('pre');
+	if (tag === 'INPUT') return isYankableInput(el as HTMLInputElement);
+	return false;
+}
+
 function hasHardClickableAncestor(el: HTMLElement): boolean {
 	let parent = el.parentElement;
 	while (parent && parent !== document.body && parent !== document.documentElement) {
@@ -560,6 +573,64 @@ function collectClickableElements(): ElementData[] {
 						}
 					}
 				}
+			}
+
+			shadowNode = nextShadowNode;
+		}
+	}
+
+	return filterOverlaps(results);
+}
+
+function collectYankableElements(): ElementData[] {
+	const root = document.body ?? document.documentElement;
+	if (!root) return [];
+
+	const results: ElementData[] = [];
+	const viewportWidth = window.innerWidth;
+	const viewportHeight = window.innerHeight;
+	const shadowRoots: ShadowRoot[] = [];
+
+	const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, {
+		acceptNode(node) {
+			const el = node as HTMLElement;
+			if (!el.offsetWidth || !el.offsetHeight) return NodeFilter.FILTER_SKIP;
+			return NodeFilter.FILTER_ACCEPT;
+		},
+	});
+
+	let node = walker.nextNode();
+	while (node) {
+		const el = node as HTMLElement;
+		const nextNode = walker.nextNode();
+
+		if (el.shadowRoot) shadowRoots.push(el.shadowRoot);
+
+		if (isYankableElement(el)) {
+			const data = getElementData(el, viewportWidth, viewportHeight);
+			if (data) results.push(data);
+		}
+
+		node = nextNode;
+	}
+
+	for (const shadowRoot of shadowRoots) {
+		const shadowWalker = document.createTreeWalker(shadowRoot, NodeFilter.SHOW_ELEMENT, {
+			acceptNode(node) {
+				const el = node as HTMLElement;
+				if (!el.offsetWidth || !el.offsetHeight) return NodeFilter.FILTER_SKIP;
+				return NodeFilter.FILTER_ACCEPT;
+			},
+		});
+
+		let shadowNode = shadowWalker.nextNode();
+		while (shadowNode) {
+			const el = shadowNode as HTMLElement;
+			const nextShadowNode = shadowWalker.nextNode();
+
+			if (isYankableElement(el)) {
+				const data = getElementData(el, viewportWidth, viewportHeight);
+				if (data) results.push(data);
 			}
 
 			shadowNode = nextShadowNode;
@@ -863,7 +934,9 @@ export class LinkHints {
 			this.#updateSearchResults();
 			mark('shown');
 		} else {
-			const elements = sortElementsForHints(collectClickableElements());
+			const elements = sortElementsForHints(
+				this.#mode === 'yank' ? collectYankableElements() : collectClickableElements(),
+			);
 			mark('collected');
 
 			const hintStrings = this.#generateHints(elements.length);
@@ -1868,6 +1941,10 @@ export class LinkHints {
 	}
 
 	#clickElement(element: HTMLElement): void {
+		if (this.#mode === 'yank') {
+			this.#yankElement(element);
+			return;
+		}
 		if (this.#mode === 'newTab' || this.#mode === 'backgroundTab') {
 			const url = this.#getElementUrl(element);
 			if (url) {
@@ -1903,6 +1980,59 @@ export class LinkHints {
 				});
 			}
 			this.#dispatchMouseEvents(element);
+		}
+	}
+
+	#yankElement(element: HTMLElement): void {
+		const text = this.#getYankText(element);
+		if (!text) return;
+		void this.#copyText(text);
+	}
+
+	#getYankText(element: HTMLElement): string {
+		if (element.tagName === 'INPUT') {
+			const input = element as HTMLInputElement;
+			return input.value ?? '';
+		}
+
+		if (element.tagName === 'TEXTAREA') {
+			const textarea = element as HTMLTextAreaElement;
+			return textarea.value ?? '';
+		}
+
+		return element.textContent ?? '';
+	}
+
+	async #copyText(text: string): Promise<void> {
+		if (navigator.clipboard?.writeText) {
+			try {
+				await navigator.clipboard.writeText(text);
+				return;
+			} catch {
+				// Fall back to execCommand copy
+			}
+		}
+
+		const host = document.body ?? document.documentElement;
+		if (!host) return;
+
+		const textarea = document.createElement('textarea');
+		textarea.value = text;
+		textarea.setAttribute('readonly', 'true');
+		textarea.style.position = 'fixed';
+		textarea.style.opacity = '0';
+		textarea.style.pointerEvents = 'none';
+		textarea.style.left = '-9999px';
+		textarea.style.top = '0';
+		host.appendChild(textarea);
+
+		textarea.select();
+		try {
+			document.execCommand('copy');
+		} catch {
+			// Ignore copy failures
+		} finally {
+			textarea.remove();
 		}
 	}
 

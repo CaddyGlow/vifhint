@@ -3,7 +3,12 @@
 import { PluginHost } from './plugins/host';
 import { pluginRegistry } from './plugins/registry';
 import type { UiApi } from './plugins/types';
-import { clearTemporaryFallbackHosts, getGlobalEnabled, getSiteDisableState } from './site-disable';
+import {
+	clearTemporaryFallbackHosts,
+	getGlobalEnabled,
+	getSiteDisableState,
+	setSiteDisableState,
+} from './site-disable';
 import { loadConfig, watchConfigChanges } from './user-config';
 
 const ui: UiApi = {
@@ -71,6 +76,12 @@ chrome.commands.onCommand.addListener((command) => {
 				chrome.tabs.sendMessage(tabs[0].id, { command: 'activate-hints' });
 			}
 		});
+	} else if (command === 'toggle-site') {
+		chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+			const tab = tabs[0];
+			if (!tab) return;
+			void toggleSiteState(tab);
+		});
 	}
 });
 
@@ -86,10 +97,37 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 			case 'tab:previous':
 				navigateTab(-1, count);
 				break;
+			case 'tab:first':
+				void gotoTabByIndex(0);
+				break;
+			case 'tab:last':
+				void gotoTabByIndex(-1);
+				break;
+			case 'tab:goto-playing':
+				void gotoPlayingTab();
+				break;
 			case 'tab:close':
 				if (sender.tab?.id) {
 					chrome.tabs.remove(sender.tab.id);
 				}
+				break;
+			case 'tab:close-left':
+				void closeTabRelative(-1, sender.tab);
+				break;
+			case 'tab:close-right':
+				void closeTabRelative(1, sender.tab);
+				break;
+			case 'tab:close-all-left':
+				void closeAllTabsOnSide('left', sender.tab);
+				break;
+			case 'tab:close-all-right':
+				void closeAllTabsOnSide('right', sender.tab);
+				break;
+			case 'tab:close-others':
+				void closeOtherTabs(sender.tab);
+				break;
+			case 'tab:close-playing':
+				void closePlayingTab();
 				break;
 			case 'tab:new':
 				for (let i = 0; i < count; i++) {
@@ -171,6 +209,19 @@ async function isTabEnabled(tab: chrome.tabs.Tab): Promise<boolean> {
 	if (!host) return false;
 	const state = await getSiteDisableState(host);
 	return state === 'enabled';
+}
+
+async function toggleSiteState(tab: chrome.tabs.Tab): Promise<void> {
+	if (!tab.id) return;
+	const host = getHostFromUrl(tab.url);
+	if (!host) return;
+	const current = await getSiteDisableState(host);
+	const next = current === 'enabled' ? 'permanent' : 'enabled';
+	await setSiteDisableState(host, next);
+	chrome.tabs.sendMessage(tab.id, { type: 'hint:site-state', host, state: next }, () => {
+		void chrome.runtime.lastError;
+	});
+	await updateActionForTab(tab);
 }
 
 function getHostFromUrl(rawUrl?: string): string | null {
@@ -257,4 +308,65 @@ async function loadIconSource(path: string): Promise<CanvasImageSource> {
 		});
 	}
 	throw new Error('Image loader not available.');
+}
+
+async function gotoTabByIndex(index: number): Promise<void> {
+	const tabs = await chrome.tabs.query({ currentWindow: true });
+	if (tabs.length === 0) return;
+	const targetIndex = index < 0 ? tabs.length + index : index;
+	const targetTab = tabs[targetIndex];
+	if (targetTab?.id) {
+		chrome.tabs.update(targetTab.id, { active: true });
+	}
+}
+
+async function gotoPlayingTab(): Promise<void> {
+	const tabs = await chrome.tabs.query({ audible: true });
+	if (tabs.length > 0 && tabs[0].id) {
+		chrome.tabs.update(tabs[0].id, { active: true });
+	}
+}
+
+async function closeTabRelative(direction: -1 | 1, currentTab?: chrome.tabs.Tab): Promise<void> {
+	if (!currentTab || currentTab.index === undefined) return;
+	const tabs = await chrome.tabs.query({ currentWindow: true });
+	const targetIndex = currentTab.index + direction;
+	const targetTab = tabs.find((t) => t.index === targetIndex);
+	if (targetTab?.id) {
+		chrome.tabs.remove(targetTab.id);
+	}
+}
+
+async function closeAllTabsOnSide(
+	side: 'left' | 'right',
+	currentTab?: chrome.tabs.Tab,
+): Promise<void> {
+	if (!currentTab || currentTab.index === undefined) return;
+	const tabs = await chrome.tabs.query({ currentWindow: true });
+	const tabsToClose = tabs.filter((t) =>
+		side === 'left' ? t.index < currentTab.index : t.index > currentTab.index,
+	);
+	const idsToClose = tabsToClose.map((t) => t.id).filter((id): id is number => id !== undefined);
+	if (idsToClose.length > 0) {
+		chrome.tabs.remove(idsToClose);
+	}
+}
+
+async function closeOtherTabs(currentTab?: chrome.tabs.Tab): Promise<void> {
+	if (!currentTab?.id) return;
+	const tabs = await chrome.tabs.query({ currentWindow: true });
+	const idsToClose = tabs
+		.filter((t) => t.id !== currentTab.id)
+		.map((t) => t.id)
+		.filter((id): id is number => id !== undefined);
+	if (idsToClose.length > 0) {
+		chrome.tabs.remove(idsToClose);
+	}
+}
+
+async function closePlayingTab(): Promise<void> {
+	const tabs = await chrome.tabs.query({ audible: true });
+	if (tabs.length > 0 && tabs[0].id) {
+		chrome.tabs.remove(tabs[0].id);
+	}
 }

@@ -1,6 +1,7 @@
 // Vim-style key binding handler
 
 import { type Keymap, appConfig } from './config';
+import { getBottomBar } from './content-dom';
 import { type KeyToken, eventToKeyToken, parseKeySequence } from './key-notation';
 import type { KeySequenceEvent } from './plugins/types';
 import type { HintMode } from './types';
@@ -210,6 +211,9 @@ export class KeyBindings {
 	#leader: string;
 	#timeoutlen: number;
 	#scrollStep: number;
+	#passthroughUntil = 0;
+	#passthroughTimeoutId: number | null = null;
+	#passthroughIndicator: HTMLDivElement | null = null;
 
 	constructor(
 		linkHints: LinkHintsInterface,
@@ -250,6 +254,14 @@ export class KeyBindings {
 			document.removeEventListener('keydown', this.#onKeyDown, true);
 			this.#onKeyDown = undefined;
 		}
+		if (this.#passthroughTimeoutId !== null) {
+			window.clearTimeout(this.#passthroughTimeoutId);
+			this.#passthroughTimeoutId = null;
+		}
+		if (this.#passthroughIndicator) {
+			this.#passthroughIndicator.remove();
+			this.#passthroughIndicator = null;
+		}
 		this.#handler.reset();
 		this.#resetCount();
 	}
@@ -257,7 +269,9 @@ export class KeyBindings {
 	#setupKeyListener(): void {
 		this.#onKeyDown = (e) => {
 			if (this.#isEnabled && !this.#isEnabled()) return;
+			if (this.#isPassthroughActive()) return;
 			const token = eventToKeyToken(e);
+			const editableTarget = this.#getEditableTarget(e);
 
 			if (this.#helpOverlay?.isVisible()) {
 				if (token === '<Esc>' || token === '?') {
@@ -287,13 +301,14 @@ export class KeyBindings {
 			if (this.#linkHints.isActive()) return;
 
 			// Escape should blur focused editable elements
-			if (token === '<Esc>' && this.#isEditableActive()) {
-				const active = document.activeElement as HTMLElement | null;
-				if (active) {
+			if (token === '<Esc>' && editableTarget) {
+				if (editableTarget) {
 					// Delay blur so page handlers see Escape on the focused element first.
 					window.setTimeout(() => {
-						if (document.activeElement === active) {
-							active.blur();
+						if (document.activeElement === editableTarget) {
+							editableTarget.blur();
+						} else if (document.activeElement instanceof HTMLElement) {
+							document.activeElement.blur();
 						}
 					}, 0);
 				}
@@ -304,7 +319,14 @@ export class KeyBindings {
 			}
 
 			// Skip if in editable element
-			if (this.#isEditableActive()) return;
+			if (editableTarget) {
+				if (!this.#handler.isIdle() || this.#countBuffer.length > 0) {
+					this.#handler.reset();
+					this.#resetCount();
+					this.#onKeySequence?.({ status: 'none' });
+				}
+				return;
+			}
 
 			if (!token) return;
 
@@ -383,6 +405,10 @@ export class KeyBindings {
 			this.#linkHints.activate('backgroundTab');
 		} else if (operation === 'hints:search') {
 			this.#linkHints.activate('search');
+		} else if (operation === 'hints:yank') {
+			this.#linkHints.activate('yank');
+		} else if (operation === 'mode:passthrough') {
+			this.#enablePassthrough(5000);
 		} else if (operation === 'scroll:top') {
 			window.scrollTo({ top: 0, behavior: 'smooth' });
 		} else if (operation === 'scroll:bottom') {
@@ -618,11 +644,75 @@ export class KeyBindings {
 	#isEditableActive(): boolean {
 		const active = document.activeElement;
 		if (!active || active === document.body) return false;
+		return this.#isEditableElement(active);
+	}
 
-		const tag = active.tagName;
+	#enablePassthrough(durationMs: number): void {
+		const normalized = Math.max(0, durationMs);
+		this.#passthroughUntil = Date.now() + normalized;
+		if (this.#passthroughTimeoutId !== null) {
+			window.clearTimeout(this.#passthroughTimeoutId);
+		}
+		this.#passthroughTimeoutId = window.setTimeout(() => {
+			this.#passthroughUntil = 0;
+			this.#passthroughTimeoutId = null;
+			this.#hidePassthroughIndicator();
+		}, normalized);
+
+		this.#showPassthroughIndicator();
+		this.#handler.reset();
+		this.#resetCount();
+		this.#search?.close();
+		this.#search?.clearHighlights();
+		this.#helpOverlay?.hide();
+		this.#onKeySequence?.({ status: 'none' });
+	}
+
+	#isPassthroughActive(): boolean {
+		return Date.now() < this.#passthroughUntil;
+	}
+
+	#showPassthroughIndicator(): void {
+		if (!this.#passthroughIndicator) {
+			const indicator = document.createElement('div');
+			indicator.className = 'visual-mode-indicator';
+			indicator.dataset.hintUi = 'true';
+			this.#passthroughIndicator = indicator;
+		}
+
+		if (!this.#passthroughIndicator.isConnected) {
+			getBottomBar().appendChild(this.#passthroughIndicator);
+		}
+
+		this.#passthroughIndicator.textContent = 'PASSTHROUGH';
+		this.#passthroughIndicator.classList.add('is-visible');
+	}
+
+	#hidePassthroughIndicator(): void {
+		if (!this.#passthroughIndicator) return;
+		this.#passthroughIndicator.classList.remove('is-visible');
+	}
+
+	#isEditableElement(target: EventTarget | null): target is HTMLElement {
+		if (!target || !(target instanceof HTMLElement)) return false;
+		const tag = target.tagName;
 		if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
-		if ((active as HTMLElement).isContentEditable) return true;
-
+		if (target.isContentEditable) return true;
+		if (target.getAttribute('role') === 'textbox') return true;
 		return false;
+	}
+
+	#getEditableTarget(event: KeyboardEvent): HTMLElement | null {
+		const directTarget = event.target;
+		if (this.#isEditableElement(directTarget)) return directTarget;
+
+		const path = event.composedPath?.() ?? [];
+		for (const entry of path) {
+			if (this.#isEditableElement(entry)) return entry;
+		}
+
+		const active = document.activeElement;
+		if (this.#isEditableElement(active)) return active;
+		return null;
 	}
 }

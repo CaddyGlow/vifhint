@@ -110,4 +110,40 @@ describe('keybindings sequence handling', () => {
 
 		bindings.dispose();
 	});
+
+	it('matches three-key sequences like gx0', () => {
+		const keymaps: Keymap[] = [
+			{ lhs: 'g0', rhs: 'tab:first', desc: 'first tab', repeatable: false },
+			{ lhs: 'gx0', rhs: 'tab:close-all-left', desc: 'close left', repeatable: false },
+		];
+		const { bindings, events } = createBindings(keymaps);
+
+		dispatchKey('g');
+		expect(events.at(-1)).toEqual({ status: 'partial', tokens: ['g'] });
+
+		dispatchKey('x');
+		expect(events.at(-1)).toEqual({ status: 'partial', tokens: ['g', 'x'] });
+
+		dispatchKey('0');
+		expect(events.at(-1)?.status).toBe('match');
+		expect(events.at(-1)?.sequence).toBe('gx0');
+
+		bindings.dispose();
+	});
+
+	it('matches g0 without conflict with gx0', () => {
+		const keymaps: Keymap[] = [
+			{ lhs: 'g0', rhs: 'tab:first', desc: 'first tab', repeatable: false },
+			{ lhs: 'gx0', rhs: 'tab:close-all-left', desc: 'close left', repeatable: false },
+		];
+		const { bindings, events } = createBindings(keymaps);
+
+		dispatchKey('g');
+		dispatchKey('0');
+
+		expect(events.at(-1)?.status).toBe('match');
+		expect(events.at(-1)?.sequence).toBe('g0');
+
+		bindings.dispose();
+	});
 });
