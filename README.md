@@ -27,25 +27,30 @@ bun run build
    - Click "Load unpacked"
    - Select the `dist` folder
 
-### Internal install (from GitHub release)
+### Quick install (no clone required)
 
-For internal distribution without building locally, you can download the latest
-release zip and extract it to a stable user folder, then load it as unpacked.
-
-```bash
-bun run install:unpacked
-```
-
-Or run the script directly:
+Install from the latest commit (builds from source, requires `bun`):
 
 ```bash
-curl -sL https://raw.githubusercontent.com/caddyglow/vifhint/main/scripts/install-unpacked.sh | bash
+curl -sL https://raw.githubusercontent.com/CaddyGlow/vifhint/dev/v0.1/scripts/install-unpacked.sh | bash
 ```
 
 PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/caddyglow/vifhint/main/scripts/install-unpacked.ps1 | iex
+irm https://raw.githubusercontent.com/CaddyGlow/vifhint/dev/v0.1/scripts/install-unpacked.ps1 | iex
+```
+
+Install from the latest GitHub release instead:
+
+```bash
+curl -sL https://raw.githubusercontent.com/CaddyGlow/vifhint/dev/v0.1/scripts/install-unpacked.sh | bash -s release
+```
+
+PowerShell:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/CaddyGlow/vifhint/dev/v0.1/scripts/install-unpacked.ps1))) -Mode release
 ```
 
 After updates, re-run the command and click "Reload" in `chrome://extensions`.
